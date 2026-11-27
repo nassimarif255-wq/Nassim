@@ -19,11 +19,19 @@ import {
 } from 'firebase/firestore';
 import {
   ArrowUpLeft,
+  Droplets,
+  Grid2x2,
+  Hammer,
+  MessageSquare,
+  Moon,
   MoveHorizontal,
+  PaintRoller,
   Plus,
   Search,
   Sun,
-  Moon,
+  Wind,
+  Wrench,
+  Zap,
 } from 'lucide-react';
 import {
   auth,
@@ -35,45 +43,65 @@ import {
 import { initHeroCanvas } from './webgl/heroCanvas';
 import { initSpecsCanvas } from './webgl/specsCanvas';
 import {
-  CATEGORY_LABELS,
+  ArtisanRecord,
   CURATED_PROJECTS,
   GENERATED_ASSETS,
   ProjectCategory,
   ProjectRecord,
-  SHOWCASE_STAGES,
+  ServiceRequestRecord,
 } from './data/showcaseDefaults';
+import {
+  AppLang,
+  getCategoryLabel,
+  SERVICE_CATEGORIES,
+  ServiceCategoryId,
+  UI_COPY,
+} from './data/i18n';
+import { ALGERIA_WILAYAS } from './data/algeriaLocations';
 import { ProjectLightbox } from './components/ProjectLightbox';
-import { ProjectManagerDrawer } from './components/ProjectManagerDrawer';
+import {
+  PortalTab,
+  ProjectManagerDrawer,
+} from './components/ProjectManagerDrawer';
+import { ArtisanProfileModal } from './components/ArtisanProfileModal';
+import { RequestDetailModal } from './components/RequestDetailModal';
+import { ContactModal, ContactTarget } from './components/ContactModal';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const HERO_SPOTLIGHTS = [
-  {
-    id: 'travertine',
-    label: 'بورسلان ترافرتين',
-    title: 'صالون فيلا بالبورسلان الترافرتين · حيدرة',
-    src: GENERATED_ASSETS.heroVilla,
-    alt: 'صالون حديث مبلط بالبورسلان الترافرتين الطبيعي',
-  },
-  {
-    id: 'calacatta',
-    label: 'ألواح كالاكاتا',
-    title: 'مطبخ عصري بألواح الرخام السيراميكي · دالي إبراهيم',
-    src: GENERATED_ASSETS.kitchenMarble,
-    alt: 'مطبخ حديث بألواح البورسلان كالاكاتا',
-  },
-  {
-    id: 'facade',
-    label: 'حجر الواجهات',
-    title: 'تكسية واجهة فيلا بالحجر الطبيعي · بجاية',
-    src: GENERATED_ASSETS.exteriorFacade,
-    alt: 'واجهة فيلا عصرية مكسوة بالحجر الطبيعي',
-  },
-];
-
 const ADMIN_EMAIL = 'nassimarif255@gmail.com';
 
+const CATEGORY_ICONS: Record<ServiceCategoryId, typeof Hammer> = {
+  construction_renovation: Hammer,
+  ceramics: Grid2x2,
+  electricity: Zap,
+  plumbing: Droplets,
+  carpentry: Wrench,
+  painting: PaintRoller,
+  hvac: Wind,
+  solar: Sun,
+};
+
+function matchesCategoryFilter(
+  itemCategory: string,
+  filter: ServiceCategoryId | 'all'
+): boolean {
+  if (filter === 'all') return true;
+  if (itemCategory === filter) return true;
+  if (
+    filter === 'construction_renovation' &&
+    ['construction', 'renovation', 'facades'].includes(itemCategory)
+  ) {
+    return true;
+  }
+  if (filter === 'ceramics' && itemCategory === 'kitchen_bath') {
+    return true;
+  }
+  return false;
+}
+
 export default function App() {
+  const [lang, setLang] = useState<AppLang>('ar');
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
   const [heroSpotIdx, setHeroSpotIdx] = useState(0);
   const [activeStage, setActiveStage] = useState(0);
@@ -81,24 +109,46 @@ export default function App() {
   const [splitPct, setSplitPct] = useState(50);
   const [splitAnimate, setSplitAnimate] = useState(false);
 
-  // Public gallery + filtering
+  // Unified Search Filters (Profession + Wilaya + Commune + Keyword)
+  const [filterProfession, setFilterProfession] = useState<
+    ServiceCategoryId | 'all'
+  >('all');
+  const [filterWilaya, setFilterWilaya] = useState<string>('all');
+  const [filterCommune, setFilterCommune] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Firestore Public Collections
   const [firestoreProjects, setFirestoreProjects] = useState<ProjectRecord[]>(
     []
   );
   const [projectsLoading, setProjectsLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState<
-    ProjectCategory | 'all'
-  >('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [artisans, setArtisans] = useState<ArtisanRecord[]>([]);
+  const [artisansLoading, setArtisansLoading] = useState(true);
+  const [requests, setRequests] = useState<ServiceRequestRecord[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
+
+  // Selected Detail Modals
   const [selectedProject, setSelectedProject] = useState<ProjectRecord | null>(
     null
   );
+  const [selectedArtisan, setSelectedArtisan] = useState<ArtisanRecord | null>(
+    null
+  );
+  const [selectedRequest, setSelectedRequest] =
+    useState<ServiceRequestRecord | null>(null);
+  const [contactTarget, setContactTarget] = useState<ContactTarget | null>(
+    null
+  );
 
-  // Auth & User Portal
+  // Auth & Portal Drawer
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<PortalTab>('project');
   const [editingProject, setEditingProject] = useState<ProjectRecord | null>(
+    null
+  );
+  const [editingArtisan, setEditingArtisan] = useState<ArtisanRecord | null>(
     null
   );
 
@@ -112,11 +162,18 @@ export default function App() {
   const stageIdxRef = useRef(0);
   const stageTimerRef = useRef<number | null>(null);
 
+  const t = UI_COPY[lang];
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // Listen to Firebase Auth
+  useEffect(() => {
+    document.documentElement.setAttribute('lang', lang);
+    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+  }, [lang]);
+
+  // Auth Listener
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
@@ -125,41 +182,113 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Live Firestore public projects feed
+  // 1. Live Firestore Projects Feed
   useEffect(() => {
-    const projectsPath = 'projects';
     const q = query(
-      collection(db, projectsPath),
+      collection(db, 'projects'),
       orderBy('createdAt', 'desc')
     );
-
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const items: ProjectRecord[] = snapshot.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            title: String(data.title || ''),
-            category: (data.category as ProjectCategory) || 'renovation',
-            location: String(data.location || ''),
-            areaSqm: String(data.areaSqm || ''),
-            description: String(data.description || ''),
-            coverImage: String(data.coverImage || ''),
-            ownerId: String(data.ownerId || ''),
-            ownerName: String(data.ownerName || 'عضو اخدم دارك'),
-            isCurated: false,
-          };
-        });
-        setFirestoreProjects(items);
+        setFirestoreProjects(
+          snapshot.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              title: String(data.title || ''),
+              category: (data.category as ProjectCategory) || 'ceramics',
+              location: String(data.location || ''),
+              areaSqm: String(data.areaSqm || ''),
+              description: String(data.description || ''),
+              coverImage: String(data.coverImage || ''),
+              ownerId: String(data.ownerId || ''),
+              ownerName: String(data.ownerName || 'عضو اخدم دارك'),
+              isCurated: false,
+            };
+          })
+        );
         setProjectsLoading(false);
       },
       (error) => {
         setProjectsLoading(false);
-        handleFirestoreError(error, OperationType.LIST, projectsPath);
+        handleFirestoreError(error, OperationType.LIST, 'projects');
       }
     );
+    return () => unsub();
+  }, []);
 
+  // 2. Live Firestore Artisans Directory
+  useEffect(() => {
+    const q = query(
+      collection(db, 'artisans'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        setArtisans(
+          snapshot.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              displayName: String(data.displayName || ''),
+              profession:
+                (data.profession as ServiceCategoryId) || 'construction_renovation',
+              experienceYears: Number(data.experienceYears || 0),
+              wilaya: String(data.wilaya || ''),
+              commune: String(data.commune || ''),
+              bio: String(data.bio || ''),
+              avatarUrl: String(data.avatarUrl || ''),
+              ownerId: String(data.ownerId || ''),
+            };
+          })
+        );
+        setArtisansLoading(false);
+      },
+      (error) => {
+        setArtisansLoading(false);
+        handleFirestoreError(error, OperationType.LIST, 'artisans');
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // 3. Live Firestore Customer Service Requests
+  useEffect(() => {
+    const q = query(
+      collection(db, 'requests'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        setRequests(
+          snapshot.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              title: String(data.title || ''),
+              category:
+                (data.category as ServiceCategoryId) || 'construction_renovation',
+              wilaya: String(data.wilaya || ''),
+              commune: String(data.commune || ''),
+              description: String(data.description || ''),
+              coverImage: String(data.coverImage || ''),
+              status:
+                (data.status as 'open' | 'in_progress' | 'closed') || 'open',
+              ownerId: String(data.ownerId || ''),
+              ownerName: String(data.ownerName || 'زبون'),
+            };
+          })
+        );
+        setRequestsLoading(false);
+      },
+      (error) => {
+        setRequestsLoading(false);
+        handleFirestoreError(error, OperationType.LIST, 'requests');
+      }
+    );
     return () => unsub();
   }, []);
 
@@ -177,7 +306,7 @@ export default function App() {
     if (!prefersReduced) {
       lenis = new Lenis({
         duration: 1.0,
-        easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        easing: (tVal: number) => Math.min(1, 1.001 - Math.pow(2, -10 * tVal)),
         smoothWheel: true,
       });
       lenis.on('scroll', ScrollTrigger.update);
@@ -203,11 +332,11 @@ export default function App() {
             pin: true,
             scrub: 0.65,
             onUpdate: (self: { progress: number }) => {
-              const t = self.progress * 3.5;
+              const tPos = self.progress * 3.5;
               let nextIdx = 0;
-              if (t >= 3.07) nextIdx = 3;
-              else if (t >= 2.02) nextIdx = 2;
-              else if (t >= 0.97) nextIdx = 1;
+              if (tPos >= 3.07) nextIdx = 3;
+              else if (tPos >= 2.02) nextIdx = 2;
+              else if (tPos >= 0.97) nextIdx = 1;
 
               if (nextIdx !== stageIdxRef.current) {
                 stageIdxRef.current = nextIdx;
@@ -270,16 +399,90 @@ export default function App() {
   const isAdmin =
     !!user && user.emailVerified && user.email === ADMIN_EMAIL;
 
-  const allProjects = useMemo(() => {
-    return [...firestoreProjects, ...CURATED_PROJECTS];
-  }, [firestoreProjects]);
+  const allProjects = useMemo(
+    () => [...firestoreProjects, ...CURATED_PROJECTS],
+    [firestoreProjects]
+  );
+
+  // Unified Search Filters across Artisans, Requests, and Projects
+  const activeWilayaObj = useMemo(
+    () => ALGERIA_WILAYAS.find((w) => w.ar === filterWilaya),
+    [filterWilaya]
+  );
+
+  const filteredArtisans = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const com = filterCommune.trim().toLowerCase();
+    return artisans.filter((art) => {
+      if (filterProfession !== 'all' && art.profession !== filterProfession)
+        return false;
+      if (
+        filterWilaya !== 'all' &&
+        art.wilaya !== filterWilaya &&
+        art.wilaya !== activeWilayaObj?.fr
+      )
+        return false;
+      if (com && !art.commune.toLowerCase().includes(com)) return false;
+      if (!q) return true;
+      return (
+        art.displayName.toLowerCase().includes(q) ||
+        art.bio.toLowerCase().includes(q) ||
+        art.wilaya.toLowerCase().includes(q) ||
+        art.commune.toLowerCase().includes(q)
+      );
+    });
+  }, [
+    artisans,
+    filterProfession,
+    filterWilaya,
+    activeWilayaObj,
+    filterCommune,
+    searchQuery,
+  ]);
+
+  const filteredRequests = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const com = filterCommune.trim().toLowerCase();
+    return requests.filter((req) => {
+      if (filterProfession !== 'all' && req.category !== filterProfession)
+        return false;
+      if (
+        filterWilaya !== 'all' &&
+        req.wilaya !== filterWilaya &&
+        req.wilaya !== activeWilayaObj?.fr
+      )
+        return false;
+      if (com && !req.commune.toLowerCase().includes(com)) return false;
+      if (!q) return true;
+      return (
+        req.title.toLowerCase().includes(q) ||
+        req.description.toLowerCase().includes(q) ||
+        req.wilaya.toLowerCase().includes(q) ||
+        req.commune.toLowerCase().includes(q)
+      );
+    });
+  }, [
+    requests,
+    filterProfession,
+    filterWilaya,
+    activeWilayaObj,
+    filterCommune,
+    searchQuery,
+  ]);
 
   const filteredProjects = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    const com = filterCommune.trim().toLowerCase();
     return allProjects.filter((p) => {
-      const catMatch =
-        activeCategory === 'all' || p.category === activeCategory;
-      if (!catMatch) return false;
+      if (!matchesCategoryFilter(p.category, filterProfession)) return false;
+      if (
+        filterWilaya !== 'all' &&
+        !p.location.includes(filterWilaya) &&
+        !(activeWilayaObj && p.location.includes(activeWilayaObj.fr))
+      ) {
+        return false;
+      }
+      if (com && !p.location.toLowerCase().includes(com)) return false;
       if (!q) return true;
       return (
         p.title.toLowerCase().includes(q) ||
@@ -287,13 +490,99 @@ export default function App() {
         p.description.toLowerCase().includes(q)
       );
     });
-  }, [allProjects, activeCategory, searchQuery]);
+  }, [
+    allProjects,
+    filterProfession,
+    filterWilaya,
+    activeWilayaObj,
+    filterCommune,
+    searchQuery,
+  ]);
 
   const userProjects = useMemo(() => {
     if (!user) return [];
     if (isAdmin) return firestoreProjects;
     return firestoreProjects.filter((p) => p.ownerId === user.uid);
   }, [firestoreProjects, user, isAdmin]);
+
+  const userArtisans = useMemo(() => {
+    if (!user) return [];
+    if (isAdmin) return artisans;
+    return artisans.filter((a) => a.ownerId === user.uid);
+  }, [artisans, user, isAdmin]);
+
+  const heroSpotlights = useMemo(
+    () => [
+      {
+        id: 'travertine',
+        label: lang === 'ar' ? 'بورسلان ترافرتين' : 'Grès Travertin',
+        title:
+          lang === 'ar'
+            ? 'تشطيب صالون بالبورسلان الترافرتين'
+            : 'Salon en grès cérame Travertin',
+        src: GENERATED_ASSETS.heroVilla,
+        alt: 'Travertine porcelain salon renovation',
+      },
+      {
+        id: 'calacatta',
+        label: lang === 'ar' ? 'ألواح كالاكاتا' : 'Dalles Calacatta',
+        title:
+          lang === 'ar'
+            ? 'مطبخ حديث بألواح الكالاكاتا'
+            : 'Cuisine moderne en dalles Calacatta',
+        src: GENERATED_ASSETS.kitchenMarble,
+        alt: 'Calacatta ceramic kitchen',
+      },
+      {
+        id: 'facade',
+        label: lang === 'ar' ? 'واجهات وحجر' : 'Façades & Pierre',
+        title:
+          lang === 'ar'
+            ? 'بناء وتكسية واجهة بالحجر الطبيعي'
+            : 'Construction et façade en pierre',
+        src: GENERATED_ASSETS.exteriorFacade,
+        alt: 'Stone clad villa exterior',
+      },
+    ],
+    [lang]
+  );
+
+  const showcaseStages = useMemo(
+    () => [
+      {
+        src: GENERATED_ASSETS.heroVilla,
+        alt: t.showcaseTitle1,
+        title: t.showcaseTitle1,
+        sub: t.showcaseSub1,
+      },
+      {
+        src: GENERATED_ASSETS.ceramicArtisan,
+        alt: t.showcaseTitle2,
+        title: t.showcaseTitle2,
+        sub: t.showcaseSub2,
+      },
+      {
+        src: GENERATED_ASSETS.kitchenMarble,
+        alt: t.showcaseTitle3,
+        title: t.showcaseTitle3,
+        sub: t.showcaseSub3,
+      },
+      {
+        src: GENERATED_ASSETS.exteriorFacade,
+        alt: t.showcaseTitle4,
+        title: t.showcaseTitle4,
+        sub: t.showcaseSub4,
+      },
+    ],
+    [t]
+  );
+
+  const openPortal = (tab: PortalTab) => {
+    setEditingProject(null);
+    setEditingArtisan(null);
+    setDrawerTab(tab);
+    setDrawerOpen(true);
+  };
 
   const selectStage = (idx: number) => {
     stageIdxRef.current = idx;
@@ -343,44 +632,81 @@ export default function App() {
   const handleSignOut = async () => {
     await signOut(auth);
     setEditingProject(null);
+    setEditingArtisan(null);
   };
 
   const handleDeleteProject = async (project: ProjectRecord) => {
     if (project.isCurated || !user) return;
     const projectPath = `projects/${project.id}`;
-    try {
-      const photosSnap = await getDocs(
-        collection(db, 'projects', project.id, 'photos')
+    const photosSnap = await getDocs(
+      collection(db, 'projects', project.id, 'photos')
+    );
+    for (const photoDoc of photosSnap.docs) {
+      await deleteDoc(
+        doc(db, 'projects', project.id, 'photos', photoDoc.id)
+      ).catch((err) =>
+        handleFirestoreError(
+          err,
+          OperationType.DELETE,
+          `projects/${project.id}/photos/${photoDoc.id}`
+        )
       );
-      for (const photoDoc of photosSnap.docs) {
-        const photoPath = `projects/${project.id}/photos/${photoDoc.id}`;
-        await deleteDoc(
-          doc(db, 'projects', project.id, 'photos', photoDoc.id)
-        ).catch((err) =>
-          handleFirestoreError(err, OperationType.DELETE, photoPath)
-        );
-      }
-      await deleteDoc(doc(db, 'projects', project.id)).catch((err) =>
-        handleFirestoreError(err, OperationType.DELETE, projectPath)
-      );
-      if (selectedProject?.id === project.id) {
-        setSelectedProject(null);
-      }
-      if (editingProject?.id === project.id) {
-        setEditingProject(null);
-      }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, projectPath);
     }
+    await deleteDoc(doc(db, 'projects', project.id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, projectPath)
+    );
+    if (selectedProject?.id === project.id) setSelectedProject(null);
+    if (editingProject?.id === project.id) setEditingProject(null);
   };
 
-  const handleEditFromLightbox = (project: ProjectRecord) => {
-    setSelectedProject(null);
-    setEditingProject(project);
-    setDrawerOpen(true);
+  const handleDeleteArtisan = async (artisan: ArtisanRecord) => {
+    if (!user) return;
+    const artPath = `artisans/${artisan.id}`;
+    const photosSnap = await getDocs(
+      collection(db, 'artisans', artisan.id, 'photos')
+    );
+    for (const photoDoc of photosSnap.docs) {
+      await deleteDoc(
+        doc(db, 'artisans', artisan.id, 'photos', photoDoc.id)
+      ).catch((err) =>
+        handleFirestoreError(
+          err,
+          OperationType.DELETE,
+          `artisans/${artisan.id}/photos/${photoDoc.id}`
+        )
+      );
+    }
+    await deleteDoc(doc(db, 'artisans', artisan.id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, artPath)
+    );
+    if (selectedArtisan?.id === artisan.id) setSelectedArtisan(null);
+    if (editingArtisan?.id === artisan.id) setEditingArtisan(null);
   };
 
-  const activeSpot = HERO_SPOTLIGHTS[heroSpotIdx];
+  const handleDeleteRequest = async (req: ServiceRequestRecord) => {
+    if (!user) return;
+    const reqPath = `requests/${req.id}`;
+    const photosSnap = await getDocs(
+      collection(db, 'requests', req.id, 'photos')
+    );
+    for (const photoDoc of photosSnap.docs) {
+      await deleteDoc(
+        doc(db, 'requests', req.id, 'photos', photoDoc.id)
+      ).catch((err) =>
+        handleFirestoreError(
+          err,
+          OperationType.DELETE,
+          `requests/${req.id}/photos/${photoDoc.id}`
+        )
+      );
+    }
+    await deleteDoc(doc(db, 'requests', req.id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, reqPath)
+    );
+    if (selectedRequest?.id === req.id) setSelectedRequest(null);
+  };
+
+  const activeSpot = heroSpotlights[heroSpotIdx];
 
   return (
     <>
@@ -402,40 +728,37 @@ export default function App() {
                 strokeLinejoin="round"
               />
             </svg>
-            <span>اخدم دارك dz darkom pro</span>
+            <span>{t.brand}</span>
           </a>
 
-          <nav className="header-nav" aria-label="التنقل الرئيسي">
+          <nav className="header-nav" aria-label="Primary">
+            <a href="#categories" className="nav-link">
+              {t.navCategories}
+            </a>
+            <a href="#artisans" className="nav-link">
+              {t.navPros}
+            </a>
+            <a href="#requests" className="nav-link">
+              {t.navRequests}
+            </a>
             <a href="#gallery" className="nav-link">
-              معرض الأعمال
-            </a>
-            <a href="#showcase" className="nav-link">
-              جولة المشاريع
-            </a>
-            <a href="#comparison" className="nav-link">
-              قبل وبعد
-            </a>
-            <a href="#services" className="nav-link">
-              التخصصات
+              {t.navGallery}
             </a>
           </nav>
 
           <button
             type="button"
             className="btn btn-primary btn-sm header-action"
-            onClick={() => {
-              setEditingProject(null);
-              setDrawerOpen(true);
-            }}
+            onClick={() => openPortal('project')}
           >
             <Plus size={16} />
-            <span>{user ? 'إضافة عمل وصور' : 'بوابة المستخدم'}</span>
+            <span>{user ? t.headerCtaSignedIn : t.headerCtaGuest}</span>
           </button>
         </div>
       </header>
 
       <main>
-        {/* SECTION 1: Hero + 4-Column Proof Strip */}
+        {/* SECTION 1: Hero + Language Toggle + 4-Column Proof Strip */}
         <section id="hero" className="hero">
           <canvas
             ref={heroCanvasRef}
@@ -446,30 +769,43 @@ export default function App() {
           <div className="container hero-inner">
             <div className="hero-grid">
               <div className="hero-copy">
-                <p className="hero-kicker">
-                  البناء · تركيب السيراميك والبورسلان · ترميم المنازل في الجزائر
-                </p>
-                <h1 className="hero-title">نبني، نبلّط، ونجدّد دارك بإتقان.</h1>
-                <p className="hero-sub">
-                  منصة <strong>اخدم دارك dz darkom pro</strong> تعرض للعامة أحدث
-                  مشاريع البناء، تبليط السيراميك والبورسلان كبير المقاس، وترميم
-                  الشقق والفيلات بتشطيب معماري متكامل، مع بوابة خاصة للمستخدم
-                  لإضافة الصور والأعمال الجديدة مباشرة.
-                </p>
+                <div className="hero-top-row">
+                  <p className="hero-kicker">{t.heroKicker}</p>
+                  <div
+                    className="lang-switch"
+                    role="group"
+                    aria-label="Language switcher"
+                  >
+                    <button
+                      type="button"
+                      className={`lang-btn${lang === 'ar' ? ' is-active' : ''}`}
+                      onClick={() => setLang('ar')}
+                    >
+                      العربية
+                    </button>
+                    <button
+                      type="button"
+                      className={`lang-btn${lang === 'fr' ? ' is-active' : ''}`}
+                      onClick={() => setLang('fr')}
+                    >
+                      Français
+                    </button>
+                  </div>
+                </div>
+
+                <h1 className="hero-title">{t.heroTitle}</h1>
+                <p className="hero-sub">{t.heroSub}</p>
 
                 <div className="hero-actions">
-                  <a href="#gallery" className="btn btn-primary">
-                    تصفح الأعمال والصور
+                  <a href="#artisans" className="btn btn-primary">
+                    {t.heroBrowsePros}
                   </a>
                   <button
                     type="button"
                     className="btn btn-ghost"
-                    onClick={() => {
-                      setEditingProject(null);
-                      setDrawerOpen(true);
-                    }}
+                    onClick={() => openPortal('request')}
                   >
-                    <span>أضف عملاً جديداً</span>
+                    <span>{t.heroPostRequest}</span>
                     <ArrowUpLeft size={16} />
                   </button>
                 </div>
@@ -486,12 +822,8 @@ export default function App() {
                 </div>
                 <div className="hero-media-caption">
                   <span className="hero-spot-label">{activeSpot.title}</span>
-                  <div
-                    className="hero-spot-tabs"
-                    role="tablist"
-                    aria-label="اختيار نموذج التشطيب"
-                  >
-                    {HERO_SPOTLIGHTS.map((item, idx) => (
+                  <div className="hero-spot-tabs" role="tablist">
+                    {heroSpotlights.map((item, idx) => (
                       <button
                         key={item.id}
                         type="button"
@@ -512,32 +844,383 @@ export default function App() {
 
             <div className="hero-kpi-strip">
               <div className="kpi-cell">
-                <span className="kpi-num tabular-nums">+120</span>
-                <span className="kpi-label">مشروع بناء وترميم منجز</span>
+                <span className="kpi-num tabular-nums">{artisans.length}</span>
+                <span className="kpi-label">{t.kpiPros}</span>
               </div>
               <div className="kpi-cell">
-                <span className="kpi-num tabular-nums">18,500 م²</span>
-                <span className="kpi-label">سيراميك وبورسلان مركّب بدقة</span>
-              </div>
-              <div className="kpi-cell">
-                <span className="kpi-num tabular-nums">58 ولاية</span>
-                <span className="kpi-label">جاهزية التنفيذ والمتابعة</span>
+                <span className="kpi-num tabular-nums">
+                  {requests.filter((r) => r.status !== 'closed').length}
+                </span>
+                <span className="kpi-label">{t.kpiRequests}</span>
               </div>
               <div className="kpi-cell">
                 <span className="kpi-num tabular-nums">
                   {allProjects.length}
                 </span>
-                <span className="kpi-label">عمل معروض حالياً في المعرض</span>
+                <span className="kpi-label">{t.kpiWorks}</span>
+              </div>
+              <div className="kpi-cell">
+                <span className="kpi-num tabular-nums">58</span>
+                <span className="kpi-label">{t.kpiCoverage}</span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* SECTION 2: Pinned 4-Stage Architectural Showcase */}
+        {/* SECTION 2: Unified Search Engine (Profession, Wilaya, Commune) */}
+        <section id="search" className="search-section">
+          <div className="container search-engine-box">
+            <div>
+              <h2 className="section-title">{t.searchTitle}</h2>
+              <p className="section-sub">{t.searchSub}</p>
+            </div>
+
+            <div className="search-grid">
+              <div className="search-input-wrap">
+                <Search size={16} className="gallery-search-icon" />
+                <input
+                  type="search"
+                  className="gallery-search-input"
+                  placeholder={t.searchKeywordPlaceholder}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              <select
+                className="form-input"
+                aria-label={t.searchProfessionAll}
+                value={filterProfession}
+                onChange={(e) =>
+                  setFilterProfession(
+                    e.target.value as ServiceCategoryId | 'all'
+                  )
+                }
+              >
+                <option value="all">{t.searchProfessionAll}</option>
+                {SERVICE_CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {lang === 'ar' ? c.ar : c.fr}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="form-input"
+                aria-label={t.searchWilayaAll}
+                value={filterWilaya}
+                onChange={(e) => {
+                  setFilterWilaya(e.target.value);
+                  setFilterCommune('');
+                }}
+              >
+                <option value="all">{t.searchWilayaAll}</option>
+                {ALGERIA_WILAYAS.map((w) => (
+                  <option key={w.code} value={w.ar}>
+                    {w.code} - {lang === 'ar' ? w.ar : w.fr}
+                  </option>
+                ))}
+              </select>
+
+              <div>
+                <input
+                  type="text"
+                  list="search-communes-list"
+                  className="form-input"
+                  placeholder={t.searchCommunePlaceholder}
+                  value={filterCommune}
+                  onChange={(e) => setFilterCommune(e.target.value)}
+                />
+                <datalist id="search-communes-list">
+                  {(activeWilayaObj?.communes || []).map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setFilterProfession('all');
+                  setFilterWilaya('all');
+                  setFilterCommune('');
+                  setSearchQuery('');
+                }}
+              >
+                {t.searchReset}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 3: 8 Service Categories */}
+        <section id="categories" className="categories-section">
+          <div className="container">
+            <h2 className="section-title">{t.categoriesTitle}</h2>
+            <p className="section-sub">{t.categoriesSub}</p>
+
+            <div className="categories-grid">
+              {SERVICE_CATEGORIES.map((cat) => {
+                const Icon = CATEGORY_ICONS[cat.id];
+                const isActive = filterProfession === cat.id;
+                const proCount = artisans.filter(
+                  (a) => a.profession === cat.id
+                ).length;
+
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`category-card${isActive ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setFilterProfession(isActive ? 'all' : cat.id);
+                      document
+                        .getElementById('artisans')
+                        ?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                  >
+                    <div className="category-card-head">
+                      <Icon size={22} />
+                      <span className="project-meta-line tabular-nums">
+                        {proCount}
+                      </span>
+                    </div>
+                    <h3 className="category-card-title">
+                      {lang === 'ar' ? cat.ar : cat.fr}
+                    </h3>
+                    <p className="category-card-desc">
+                      {lang === 'ar' ? cat.descAr : cat.descFr}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 4: Professionals Directory */}
+        <section id="artisans" className="artisans-section">
+          <div className="container">
+            <div className="gallery-header">
+              <div>
+                <h2 className="section-title">{t.prosTitle}</h2>
+                <p className="section-sub">{t.prosSub}</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => openPortal('artisan')}
+              >
+                <Plus size={17} />
+                <span>{t.prosRegisterBtn}</span>
+              </button>
+            </div>
+
+            {artisansLoading ? (
+              <div className="gallery-empty">
+                <p>...</p>
+              </div>
+            ) : filteredArtisans.length === 0 ? (
+              <div className="gallery-empty">
+                <p>
+                  <strong>{t.prosEmpty}</strong>
+                </p>
+                <p style={{ marginTop: 8 }}>{t.prosEmptyHint}</p>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  style={{ marginTop: 16 }}
+                  onClick={() => openPortal('artisan')}
+                >
+                  <Plus size={15} />
+                  <span>{t.prosRegisterBtn}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="artisans-grid">
+                {filteredArtisans.map((art) => (
+                  <article key={art.id} className="artisan-card">
+                    <div className="artisan-card-head">
+                      {art.avatarUrl ? (
+                        <img
+                          src={art.avatarUrl}
+                          alt={art.displayName}
+                          className="artisan-avatar"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="artisan-avatar">
+                          {art.displayName.charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <h3 className="artisan-name">{art.displayName}</h3>
+                        <div className="project-meta-line">
+                          <span>{getCategoryLabel(art.profession, lang)}</span>
+                          <span aria-hidden="true">·</span>
+                          <span className="tabular-nums">
+                            {art.experienceYears} {t.prosYearsExp}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="project-meta-line">
+                      <span>{art.wilaya}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{art.commune}</span>
+                    </div>
+
+                    <p className="project-card-desc">{art.bio}</p>
+
+                    <div className="artisan-card-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setSelectedArtisan(art)}
+                      >
+                        {t.prosViewProfile}
+                      </button>
+                      {(!user || user.uid !== art.ownerId) && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() =>
+                            setContactTarget({
+                              recipientOwnerId: art.ownerId,
+                              recipientName: art.displayName,
+                              contextType: 'artisan',
+                              contextId: art.id,
+                              contextTitle: `${getCategoryLabel(
+                                art.profession,
+                                lang
+                              )} · ${art.wilaya}`,
+                            })
+                          }
+                        >
+                          <MessageSquare size={14} />
+                          <span>{t.prosContactBtn}</span>
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* SECTION 5: Customer Service Requests Board */}
+        <section id="requests" className="requests-section">
+          <div className="container">
+            <div className="gallery-header">
+              <div>
+                <h2 className="section-title">{t.requestsTitle}</h2>
+                <p className="section-sub">{t.requestsSub}</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => openPortal('request')}
+              >
+                <Plus size={17} />
+                <span>{t.requestsNewBtn}</span>
+              </button>
+            </div>
+
+            {requestsLoading ? (
+              <div className="gallery-empty">
+                <p>...</p>
+              </div>
+            ) : filteredRequests.length === 0 ? (
+              <div className="gallery-empty">
+                <p>
+                  <strong>{t.requestsEmpty}</strong>
+                </p>
+                <p style={{ marginTop: 8 }}>{t.requestsEmptyHint}</p>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  style={{ marginTop: 16 }}
+                  onClick={() => openPortal('request')}
+                >
+                  <Plus size={15} />
+                  <span>{t.requestsNewBtn}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="requests-grid">
+                {filteredRequests.map((req) => {
+                  const statusText =
+                    req.status === 'open'
+                      ? t.statusOpen
+                      : req.status === 'in_progress'
+                        ? t.statusInProgress
+                        : t.statusClosed;
+                  return (
+                    <article key={req.id} className="request-card">
+                      {req.coverImage && (
+                        <img
+                          src={req.coverImage}
+                          alt={req.title}
+                          className="request-thumb-img"
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
+                      <div className="project-meta-line">
+                        <span>{getCategoryLabel(req.category, lang)}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                          {req.wilaya} - {req.commune}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span>{statusText}</span>
+                      </div>
+                      <h3 className="project-card-title">{req.title}</h3>
+                      <p className="project-card-desc">{req.description}</p>
+
+                      <div className="request-card-actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setSelectedRequest(req)}
+                        >
+                          {t.requestsDetailsBtn}
+                        </button>
+                        {(!user || user.uid !== req.ownerId) &&
+                          req.status !== 'closed' && (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() =>
+                                setContactTarget({
+                                  recipientOwnerId: req.ownerId,
+                                  recipientName: req.ownerName,
+                                  contextType: 'request',
+                                  contextId: req.id,
+                                  contextTitle: req.title,
+                                })
+                              }
+                            >
+                              <MessageSquare size={14} />
+                              <span>{t.requestsOfferBtn}</span>
+                            </button>
+                          )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* SECTION 6: Pinned 4-Stage Architectural Showcase (Preserved) */}
         <section id="showcase" ref={showcaseRef} className="showcase-pin">
           <div className="showcase-viewport">
             <div className="showcase-frames">
-              {SHOWCASE_STAGES.map((stage, i) => (
+              {showcaseStages.map((stage, i) => (
                 <figure
                   key={stage.src}
                   ref={(el: HTMLElement | null) => {
@@ -560,26 +1243,20 @@ export default function App() {
                 className={`showcase-caption${captionBlur ? ' is-blurring' : ''}`}
               >
                 <h2 className="caption-title">
-                  {SHOWCASE_STAGES[activeStage].title}
+                  {showcaseStages[activeStage].title}
                 </h2>
-                <p className="caption-sub">
-                  {SHOWCASE_STAGES[activeStage].sub}
-                </p>
+                <p className="caption-sub">{showcaseStages[activeStage].sub}</p>
               </div>
 
-              <div
-                className="showcase-dots"
-                role="tablist"
-                aria-label="مراحل العرض المعماري"
-              >
-                {SHOWCASE_STAGES.map((stage, i) => (
+              <div className="showcase-dots" role="tablist">
+                {showcaseStages.map((stage, i) => (
                   <button
-                    key={stage.title}
+                    key={i}
                     type="button"
                     role="tab"
                     aria-selected={activeStage === i}
                     className={`stage-dot${activeStage === i ? ' is-active' : ''}`}
-                    aria-label={`المرحلة ${i + 1}`}
+                    aria-label={`${i + 1}`}
                     onClick={() => selectStage(i)}
                   />
                 ))}
@@ -588,7 +1265,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* SECTION 3: Before & After Renovation Comparison */}
+        {/* SECTION 7: Before & After Renovation Comparison (Preserved) */}
         <section id="comparison" className="thermal-section">
           <div className="container thermal-grid">
             <div
@@ -603,12 +1280,12 @@ export default function App() {
               <div className="comparison-layer">
                 <img
                   src={GENERATED_ASSETS.afterFinished}
-                  alt="الشقة بعد انتهاء أعمال الترميم وتركيب البورسلان"
+                  alt={t.compAfter}
                   className="comparison-img"
                   referrerPolicy="no-referrer"
                 />
                 <span className="comp-corner-tag comp-corner-right">
-                  بعد التسليم
+                  {t.compAfter}
                 </span>
               </div>
 
@@ -623,12 +1300,12 @@ export default function App() {
               >
                 <img
                   src={GENERATED_ASSETS.beforeConstruction}
-                  alt="حالة الشقة أثناء البناء والطوب الأحمر قبل الترميم"
+                  alt={t.compBefore}
                   className="comparison-img"
                   referrerPolicy="no-referrer"
                 />
                 <span className="comp-corner-tag comp-corner-left">
-                  قبل الأشغال
+                  {t.compBefore}
                 </span>
               </div>
 
@@ -638,7 +1315,7 @@ export default function App() {
                 }`}
                 role="slider"
                 tabIndex={0}
-                aria-label="مقارنة قبل وبعد الترميم"
+                aria-label={t.compTitle}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={Math.round(splitPct)}
@@ -661,18 +1338,10 @@ export default function App() {
             </div>
 
             <div className="thermal-copy">
-              <h2 className="section-title">من الطوب الخام إلى تسليم المفتاح.</h2>
-              <p className="section-sub">
-                اسحب المؤشر لمعاينة التحول الكامل في مشاريع الترميم: من بناء
-                الجدران وتسوية الأرضيات إلى تركيب البورسلان، الجبس، والدهان
-                المعماري.
-              </p>
+              <h2 className="section-title">{t.compTitle}</h2>
+              <p className="section-sub">{t.compSub}</p>
 
-              <div
-                className="segmented-control"
-                role="tablist"
-                aria-label="حالة المقارنة"
-              >
+              <div className="segmented-control" role="tablist">
                 <button
                   type="button"
                   role="tab"
@@ -680,7 +1349,7 @@ export default function App() {
                   aria-selected={splitPct >= 98}
                   onClick={() => updateSplit(100, true)}
                 >
-                  قبل الأشغال
+                  {t.compBefore}
                 </button>
                 <button
                   type="button"
@@ -689,69 +1358,60 @@ export default function App() {
                   aria-selected={splitPct <= 2}
                   onClick={() => updateSplit(0, true)}
                 >
-                  بعد التسليم
+                  {t.compAfter}
                 </button>
               </div>
 
               <div className="thermal-metrics">
                 <div className="metric-item">
-                  <span className="metric-value tabular-nums">45 يوماً</span>
-                  <span className="metric-label">متوسط مدة ترميم شقة</span>
+                  <span className="metric-value tabular-nums">
+                    {t.compMetric1Val}
+                  </span>
+                  <span className="metric-label">{t.compMetric1Lbl}</span>
                 </div>
                 <div className="metric-item">
-                  <span className="metric-value tabular-nums">1 ملم</span>
-                  <span className="metric-label">دقة فواصل السيراميك</span>
+                  <span className="metric-value tabular-nums">
+                    {t.compMetric2Val}
+                  </span>
+                  <span className="metric-label">{t.compMetric2Lbl}</span>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* SECTION 4: Services Asymmetric Bento */}
+        {/* SECTION 8: Asymmetric Bento Craftsmanship (Preserved) */}
         <section id="services" className="bento-section">
           <div className="container">
             <div className="section-header-stack">
-              <h2 className="section-title">تخصصات البناء والسيراميك.</h2>
-              <p className="section-sub">
-                تنفيذ متقن لكل مراحل الورشة من التأسيس الهيكلي حتى أدق تفاصيل
-                البلاط والتجهيز الداخلي.
-              </p>
+              <h2 className="section-title">{t.bentoTitle}</h2>
+              <p className="section-sub">{t.bentoSub}</p>
             </div>
 
             <div className="bento-grid" ref={bentoGridRef}>
               <article className="bento-tile bento-tall reveal-tile">
                 <img
                   src={GENERATED_ASSETS.ceramicArtisan}
-                  alt="تركيب ألواح السيراميك والبورسلان كبير المقاس"
+                  alt={t.bentoTile1Title}
                   className="bento-img"
                   referrerPolicy="no-referrer"
                 />
                 <div className="bento-footer">
-                  <h3 className="bento-title">
-                    01. تركيب السيراميك والبورسلان كبير المقاس
-                  </h3>
-                  <p className="bento-sub">
-                    تثبيت الألواح باستخدام الغراء المرن C2TE ومشابك التسوية
-                    الليزرية لأرضيات وجدران خالية من التفاوت.
-                  </p>
+                  <h3 className="bento-title">{t.bentoTile1Title}</h3>
+                  <p className="bento-sub">{t.bentoTile1Sub}</p>
                 </div>
               </article>
 
               <article className="bento-tile bento-top reveal-tile">
                 <img
                   src={GENERATED_ASSETS.kitchenMarble}
-                  alt="تجهيز وتبليط المطابخ والحمامات الحديثة"
+                  alt={t.bentoTile2Title}
                   className="bento-img"
                   referrerPolicy="no-referrer"
                 />
                 <div className="bento-footer">
-                  <h3 className="bento-title">
-                    02. تجديد المطابخ والحمامات العصرية
-                  </h3>
-                  <p className="bento-sub">
-                    عزل مائي محكم، سباكة حديثة، وتلبيس بألواح الكالاكاتا المقاومة
-                    للرطوبة.
-                  </p>
+                  <h3 className="bento-title">{t.bentoTile2Title}</h3>
+                  <p className="bento-sub">{t.bentoTile2Sub}</p>
                 </div>
               </article>
 
@@ -763,88 +1423,41 @@ export default function App() {
                 />
                 <div className="bento-footer bento-footer-specs">
                   <div>
-                    <h3 className="bento-title">
-                      03. البناء الهيكلي والترميم الشامل
-                    </h3>
-                    <p className="bento-sub">
-                      دراسة هندسية، بناء، تلبيس إسمنتي وجبسي، وواجهات حجرية
-                    </p>
+                    <h3 className="bento-title">{t.bentoTile3Title}</h3>
+                    <p className="bento-sub">{t.bentoTile3Sub}</p>
                   </div>
-                  <span className="bento-spec-note">تسليم مفتاح</span>
+                  <span className="bento-spec-note">{t.bentoSpecNote}</span>
                 </div>
               </article>
             </div>
           </div>
         </section>
 
-        {/* SECTION 5: Public Works & Photos Gallery */}
+        {/* SECTION 9: Public Works & Photos Gallery (Preserved + Unified Filtering) */}
         <section id="gallery" className="gallery-section">
           <div className="container">
             <div className="gallery-header">
               <div>
-                <h2 className="section-title">معرض الأعمال والصور للعامة</h2>
-                <p className="section-sub">
-                  تصفح جميع المشاريع المنفذة والمضافة حديثاً. اضغط على أي مشروع
-                  لمعاينة الصور والتفاصيل الكاملة.
-                </p>
+                <h2 className="section-title">{t.galleryTitle}</h2>
+                <p className="section-sub">{t.gallerySub}</p>
               </div>
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => {
-                  setEditingProject(null);
-                  setDrawerOpen(true);
-                }}
+                onClick={() => openPortal('project')}
               >
                 <Plus size={17} />
-                <span>إضافة عمل وصور</span>
+                <span>{t.galleryAddBtn}</span>
               </button>
-            </div>
-
-            <div className="gallery-toolbar">
-              <div
-                className="filter-tabs"
-                role="tablist"
-                aria-label="تصفية الأعمال حسب التخصص"
-              >
-                {(
-                  Object.keys(CATEGORY_LABELS) as (ProjectCategory | 'all')[]
-                ).map((cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    role="tab"
-                    aria-selected={activeCategory === cat}
-                    className={`filter-tab${
-                      activeCategory === cat ? ' is-active' : ''
-                    }`}
-                    onClick={() => setActiveCategory(cat)}
-                  >
-                    {CATEGORY_LABELS[cat]}
-                  </button>
-                ))}
-              </div>
-
-              <div className="gallery-search-wrap">
-                <Search size={16} className="gallery-search-icon" />
-                <input
-                  type="search"
-                  className="gallery-search-input"
-                  placeholder="ابحث بالولاية أو نوع العمل..."
-                  aria-label="ابحث في المشاريع"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
             </div>
 
             {projectsLoading && firestoreProjects.length === 0 ? (
               <div className="gallery-empty">
-                <p>جاري تحميل المشاريع...</p>
+                <p>...</p>
               </div>
             ) : filteredProjects.length === 0 ? (
               <div className="gallery-empty">
-                <p>لا توجد أعمال مطابقة للبحث الحالي.</p>
+                <p>{t.galleryEmpty}</p>
               </div>
             ) : (
               <div className="projects-grid">
@@ -865,7 +1478,7 @@ export default function App() {
                     </div>
                     <div className="project-card-body">
                       <div className="project-meta-line">
-                        <span>{CATEGORY_LABELS[project.category]}</span>
+                        <span>{getCategoryLabel(project.category, lang)}</span>
                         <span aria-hidden="true">·</span>
                         <span>{project.location}</span>
                         <span aria-hidden="true">·</span>
@@ -875,7 +1488,9 @@ export default function App() {
                       <p className="project-card-desc">{project.description}</p>
                       <div className="project-card-foot">
                         <span>{project.ownerName}</span>
-                        <span className="project-view-cta">معاينة الصور</span>
+                        <span className="project-view-cta">
+                          {t.galleryViewPhotos}
+                        </span>
                       </div>
                     </div>
                   </button>
@@ -888,16 +1503,23 @@ export default function App() {
 
       <footer className="site-footer">
         <div className="container footer-inner">
-          <span className="footer-brand">اخدم دارك dz darkom pro</span>
-          <span>أعمال البناء والسيراميك وترميم المنازل</span>
+          <span className="footer-brand">{t.brand}</span>
+          <span>{t.footerTag}</span>
           <div className="footer-actions">
+            <button
+              type="button"
+              className="theme-switch-btn"
+              onClick={() => setLang(lang === 'ar' ? 'fr' : 'ar')}
+            >
+              {lang === 'ar' ? 'Français' : 'العربية'}
+            </button>
             <button
               type="button"
               className="theme-switch-btn"
               onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
             >
               {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-              <span>{theme === 'light' ? 'الوضع الداكن' : 'الوضع الفاتح'}</span>
+              <span>{theme === 'light' ? t.themeDark : t.themeLight}</span>
             </button>
             <span>© 2026 dz darkom pro</span>
           </div>
@@ -908,24 +1530,108 @@ export default function App() {
         project={selectedProject}
         user={user}
         isAdmin={isAdmin}
+        lang={lang}
         onClose={() => setSelectedProject(null)}
-        onEdit={handleEditFromLightbox}
+        onEdit={(proj) => {
+          setSelectedProject(null);
+          setEditingProject(proj);
+          setDrawerTab('project');
+          setDrawerOpen(true);
+        }}
         onDelete={handleDeleteProject}
+      />
+
+      <ArtisanProfileModal
+        artisan={selectedArtisan}
+        linkedProjects={
+          selectedArtisan
+            ? firestoreProjects.filter(
+                (p) => p.ownerId === selectedArtisan.ownerId
+              )
+            : []
+        }
+        user={user}
+        isAdmin={isAdmin}
+        lang={lang}
+        onClose={() => setSelectedArtisan(null)}
+        onEdit={(art) => {
+          setSelectedArtisan(null);
+          setEditingArtisan(art);
+          setDrawerTab('artisan');
+          setDrawerOpen(true);
+        }}
+        onDelete={handleDeleteArtisan}
+        onContact={(art) => {
+          setSelectedArtisan(null);
+          setContactTarget({
+            recipientOwnerId: art.ownerId,
+            recipientName: art.displayName,
+            contextType: 'artisan',
+            contextId: art.id,
+            contextTitle: `${getCategoryLabel(art.profession, lang)} · ${
+              art.wilaya
+            }`,
+          });
+        }}
+        onOpenProject={(proj) => {
+          setSelectedArtisan(null);
+          setSelectedProject(proj);
+        }}
+      />
+
+      <RequestDetailModal
+        request={selectedRequest}
+        user={user}
+        isAdmin={isAdmin}
+        lang={lang}
+        onClose={() => setSelectedRequest(null)}
+        onDelete={handleDeleteRequest}
+        onContact={(req) => {
+          setSelectedRequest(null);
+          setContactTarget({
+            recipientOwnerId: req.ownerId,
+            recipientName: req.ownerName,
+            contextType: 'request',
+            contextId: req.id,
+            contextTitle: req.title,
+          });
+        }}
+      />
+
+      <ContactModal
+        target={contactTarget}
+        user={user}
+        lang={lang}
+        onClose={() => setContactTarget(null)}
+        onSignIn={handleSignIn}
       />
 
       <ProjectManagerDrawer
         open={drawerOpen}
+        initialTab={drawerTab}
         user={user}
         authLoading={authLoading}
         isAdmin={isAdmin}
+        lang={lang}
         editingProject={editingProject}
+        editingArtisan={editingArtisan}
         userProjects={userProjects}
+        userArtisans={userArtisans}
         onClose={() => setDrawerOpen(false)}
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
-        onClearEdit={() => setEditingProject(null)}
-        onEditProject={(proj) => setEditingProject(proj)}
+        onClearEditProject={() => setEditingProject(null)}
+        onClearEditArtisan={() => setEditingArtisan(null)}
+        onEditProject={(proj) => {
+          setEditingProject(proj);
+          setDrawerTab('project');
+        }}
         onDeleteProject={handleDeleteProject}
+        onEditArtisan={(art) => {
+          setEditingArtisan(art);
+          setDrawerTab('artisan');
+        }}
+        onDeleteArtisan={handleDeleteArtisan}
       />
     </>
   );

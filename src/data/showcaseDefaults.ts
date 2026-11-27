@@ -4,9 +4,10 @@ import beforeConstructionImg from '../assets/images/before_raw_construction_1795
 import afterFinishedImg from '../assets/images/after_finished_luxury_1795804095333.jpg';
 import exteriorFacadeImg from '../assets/images/exterior_facade_stone_1795804096106.jpg';
 import kitchenMarbleImg from '../assets/images/kitchen_marble_ceramic_1795804096407.jpg';
+import type { ServiceCategoryId } from './i18n';
 
 export type ProjectCategory =
-  | 'ceramics'
+  | ServiceCategoryId
   | 'construction'
   | 'renovation'
   | 'kitchen_bath'
@@ -31,17 +32,48 @@ export interface ProjectRecord {
   ownerName: string;
   isCurated?: boolean;
   extraPhotos?: { imageUrl: string; caption: string }[];
-  createdAtMs?: number;
 }
 
-export const CATEGORY_LABELS: Record<ProjectCategory | 'all', string> = {
-  all: 'جميع الأعمال',
-  ceramics: 'سيراميك وبورسلان',
-  construction: 'بناء وتشييد',
-  renovation: 'ترميم وتجديد',
-  kitchen_bath: 'مطابخ وحمامات',
-  facades: 'واجهات وحجر',
-};
+export interface ArtisanRecord {
+  id: string;
+  displayName: string;
+  profession: ServiceCategoryId;
+  experienceYears: number;
+  wilaya: string;
+  commune: string;
+  bio: string;
+  avatarUrl: string;
+  ownerId: string;
+}
+
+export interface ServiceRequestRecord {
+  id: string;
+  title: string;
+  category: ServiceCategoryId;
+  wilaya: string;
+  commune: string;
+  description: string;
+  coverImage: string;
+  status: 'open' | 'in_progress' | 'closed';
+  ownerId: string;
+  ownerName: string;
+}
+
+export interface InquiryRecord {
+  id: string;
+  senderId: string;
+  senderName: string;
+  recipientOwnerId: string;
+  recipientName: string;
+  contextType: 'artisan' | 'request';
+  contextId: string;
+  contextTitle: string;
+  message: string;
+  contactInfo: string;
+  replyText: string;
+  status: 'pending' | 'replied';
+  createdAtMs: number;
+}
 
 export const GENERATED_ASSETS = {
   heroVilla: heroVillaImg,
@@ -52,45 +84,18 @@ export const GENERATED_ASSETS = {
   kitchenMarble: kitchenMarbleImg,
 };
 
-export const SHOWCASE_STAGES = [
-  {
-    src: GENERATED_ASSETS.heroVilla,
-    alt: 'تجديد غرفة معيشة فاخرة ببلاط البورسلان الترافرتين الكبير',
-    title: 'تشطيب معماري وبورسلان فاخر',
-    sub: 'تبليط مساحات واسعة بألواح الترافرتين والبورسلان الإسباني بدقة مليمترية',
-  },
-  {
-    src: GENERATED_ASSETS.ceramicArtisan,
-    alt: 'تركيب سيراميك وبورسلان بعروق الرخام مع فواصل دقيقة',
-    title: 'تركيب السيراميك بالليزر',
-    sub: 'فواصل 1 ملم متساوية وتثبيت بمشابك التسوية لضمان استواء مثالي للأرضيات',
-  },
-  {
-    src: GENERATED_ASSETS.kitchenMarble,
-    alt: 'مطبخ حديث بألواح البورسلان الكالاكاتا والخشب الداكن',
-    title: 'مطابخ وأسطح كالاكاتا',
-    sub: 'تجديد شامل للمطابخ والحمامات بأسطح البورسلان المقاومة للحرارة والخدش',
-  },
-  {
-    src: GENERATED_ASSETS.exteriorFacade,
-    alt: 'واجهة فيلا عصرية مكسوة بالحجر الطبيعي وبلاط التراس',
-    title: 'بناء وتكسية الواجهات',
-    sub: 'أعمال البناء الهيكلي، التلبيس المعماري، وتكسية الحجر الطبيعي وبلاط التراسات',
-  },
-];
-
 export const CURATED_PROJECTS: ProjectRecord[] = [
   {
     id: 'curated-hydra-villa',
-    title: 'تبليط وتجديد صالون فيلا بالبورسلان الترافرتين',
+    title: 'نموذج مرجعي: تبليط وتجديد صالون فيلا بالبورسلان الترافرتين',
     category: 'ceramics',
     location: 'حيدرة، الجزائر العاصمة',
     areaSqm: '210 م²',
     description:
-      'مشروع تجديد شامل لطابق أرضي بفيلا سكنية مع تركيب ألواح بورسلان مقاس 120×120 سم بتشطيب ترافرتين طبيعي، وإعادة تهيئة الأسقف الجبسية مع الإضاءة المخفية والواجهات الزجاجية.',
+      'نموذج مرجعي لتجديد طابق أرضي بفيلا سكنية مع تركيب ألواح بورسلان مقاس 120×120 سم بتشطيب ترافرتين طبيعي، وإعادة تهيئة الأسقف الجبسية مع الإضاءة المخفية.',
     coverImage: GENERATED_ASSETS.heroVilla,
     ownerId: 'curated',
-    ownerName: 'اخدم دارك dz darkom pro',
+    ownerName: 'نماذج استوديو اخدم دارك',
     isCurated: true,
     extraPhotos: [
       {
@@ -105,15 +110,15 @@ export const CURATED_PROJECTS: ProjectRecord[] = [
   },
   {
     id: 'curated-oran-apartment',
-    title: 'ترميم وتأهيل شقة من الطوب الأحمر إلى التسليم المفتاحي',
-    category: 'renovation',
+    title: 'نموذج مرجعي: ترميم وتأهيل شقة من الطوب الأحمر إلى التسليم',
+    category: 'construction_renovation',
     location: 'بئر الجير، وهران',
     areaSqm: '140 م²',
     description:
-      'إعادة بناء وتوزيع الفضاء الداخلي لشقة سكنية انطلاقاً من مرحلة الأشغال الكبرى والطوب الأحمر وصولاً إلى التلبيس، التمديدات الصحية والكهربائية، وتركيب البورسلان اللامع.',
+      'نموذج مرجعي لإعادة بناء وتوزيع الفضاء الداخلي لشقة سكنية انطلاقاً من مرحلة الأشغال الكبرى والطوب الأحمر وصولاً إلى التلبيس، التمديدات الصحية والكهربائية، وتركيب البورسلان.',
     coverImage: GENERATED_ASSETS.afterFinished,
     ownerId: 'curated',
-    ownerName: 'اخدم دارك dz darkom pro',
+    ownerName: 'نماذج استوديو اخدم دارك',
     isCurated: true,
     extraPhotos: [
       {
@@ -124,54 +129,28 @@ export const CURATED_PROJECTS: ProjectRecord[] = [
   },
   {
     id: 'curated-kitchen-calacatta',
-    title: 'تصميم وتبليط مطبخ عصري بألواح الكالاكاتا',
-    category: 'kitchen_bath',
+    title: 'نموذج مرجعي: تصميم وتبليط مطبخ عصري بألواح الكالاكاتا',
+    category: 'ceramics',
     location: 'دالي إبراهيم، الجزائر العاصمة',
     areaSqm: '38 م²',
     description:
-      'تركيب ألواح سيراميك وبورسلان كالاكاتا الكبيرة للجدران وجزيرة المطبخ الوسطية مع تناسق العروق الرخامية وأرضيات مصقولة سهلة التنظيف.',
+      'نموذج مرجعي لتركيب ألواح سيراميك وبورسلان كالاكاتا الكبيرة للجدران وجزيرة المطبخ الوسطية مع تناسق العروق الرخامية وأرضيات مصقولة.',
     coverImage: GENERATED_ASSETS.kitchenMarble,
     ownerId: 'curated',
-    ownerName: 'اخدم دارك dz darkom pro',
+    ownerName: 'نماذج استوديو اخدم دارك',
     isCurated: true,
   },
   {
     id: 'curated-facade-bejaia',
-    title: 'بناء وتكسية واجهة فيلا ساحلية بالحجر الطبيعي',
-    category: 'facades',
+    title: 'نموذج مرجعي: بناء وتكسية واجهة فيلا ساحلية بالحجر الطبيعي',
+    category: 'construction_renovation',
     location: 'بجاية',
     areaSqm: '340 م²',
     description:
-      'أشغال البناء والتشطيب الخارجي شاملة تكسية الأعمدة بالحجر الطبيعي المقاوم للرطوبة، طلاء الواجهات المعماري، وتبليط التراس ببلاط بورسلان خارجي مانع للانزلاق.',
+      'نموذج مرجعي لأشغال البناء والتشطيب الخارجي شاملة تكسية الأعمدة بالحجر الطبيعي المقاوم للرطوبة وتبليط التراس ببلاط خارجي مانع للانزلاق.',
     coverImage: GENERATED_ASSETS.exteriorFacade,
     ownerId: 'curated',
-    ownerName: 'اخدم دارك dz darkom pro',
-    isCurated: true,
-  },
-  {
-    id: 'curated-porcelain-hall',
-    title: 'تركيب بورسلان رخامي مقاس كبير مع فواصل نحاسية',
-    category: 'ceramics',
-    location: 'سطيف',
-    areaSqm: '165 م²',
-    description:
-      'تنفيذ دقيق لأرضيات الاستقبال والممرات باستخدام مشابك التسوية بالليزر والفواصل النحاسية الرفيعة لضمان استمرارية العروق دون أي تفاوت في الارتفاع.',
-    coverImage: GENERATED_ASSETS.ceramicArtisan,
-    ownerId: 'curated',
-    ownerName: 'اخدم دارك dz darkom pro',
-    isCurated: true,
-  },
-  {
-    id: 'curated-structural-build',
-    title: 'أشغال البناء والهيكل الداخلي وتهيئة الجدران',
-    category: 'construction',
-    location: 'قسنطينة',
-    areaSqm: '260 م²',
-    description:
-      'بناء الجدران الفاصلة بالطوب الأحمر المزدوج، تنفيذ تسوية الأرضيات (Chape) وتأسيس الشبكات التقنية بدقة تمهيداً لمرحلة التلبيس والسيراميك.',
-    coverImage: GENERATED_ASSETS.beforeConstruction,
-    ownerId: 'curated',
-    ownerName: 'اخدم دارك dz darkom pro',
+    ownerName: 'نماذج استوديو اخدم دارك',
     isCurated: true,
   },
 ];

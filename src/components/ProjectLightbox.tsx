@@ -10,19 +10,20 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import { X, Plus, Trash2, Pencil, Upload } from 'lucide-react';
+import { X, Trash2, Pencil, Upload } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
-  CATEGORY_LABELS,
   ProjectPhotoItem,
   ProjectRecord,
 } from '../data/showcaseDefaults';
+import { AppLang, getCategoryLabel } from '../data/i18n';
 import { compressImageFile } from '../utils/imageProcessor';
 
 interface ProjectLightboxProps {
   project: ProjectRecord | null;
   user: User | null;
   isAdmin: boolean;
+  lang: AppLang;
   onClose: () => void;
   onEdit: (project: ProjectRecord) => void;
   onDelete: (project: ProjectRecord) => void;
@@ -32,6 +33,7 @@ export function ProjectLightbox({
   project,
   user,
   isAdmin,
+  lang,
   onClose,
   onEdit,
   onDelete,
@@ -122,7 +124,9 @@ export function ProjectLightbox({
     setAddingPhoto(true);
     try {
       const compressed = await compressImageFile(file);
-      const photoId = `photo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const photoId = `photo_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 7)}`;
       const path = `projects/${project.id}/photos/${photoId}`;
       await setDoc(doc(db, 'projects', project.id, 'photos', photoId), {
         imageUrl: compressed,
@@ -166,18 +170,18 @@ export function ProjectLightbox({
       >
         <div className="lightbox-top">
           <div className="lightbox-meta-line">
-            <span>{CATEGORY_LABELS[project.category]}</span>
+            <span>{getCategoryLabel(project.category, lang)}</span>
             <span aria-hidden="true">·</span>
             <span>{project.location}</span>
             <span aria-hidden="true">·</span>
             <span className="tabular-nums">{project.areaSqm}</span>
             <span aria-hidden="true">·</span>
-            <span>بواسطة {project.ownerName}</span>
+            <span>{project.ownerName}</span>
           </div>
           <button
             type="button"
             className="icon-btn"
-            aria-label="إغلاق المعاينة"
+            aria-label={lang === 'ar' ? 'إغلاق المعاينة' : 'Fermer'}
             onClick={onClose}
           >
             <X size={18} />
@@ -197,11 +201,11 @@ export function ProjectLightbox({
                 <button
                   type="button"
                   className="lightbox-delete-photo"
-                  title="حذف هذه الصورة"
+                  title={lang === 'ar' ? 'حذف هذه الصورة' : 'Supprimer cette photo'}
                   onClick={() => handleDeleteExtraPhoto(activePhoto.id!)}
                 >
                   <Trash2 size={15} />
-                  <span>حذف الصورة</span>
+                  <span>{lang === 'ar' ? 'حذف الصورة' : 'Supprimer'}</span>
                 </button>
               )}
             </div>
@@ -223,7 +227,7 @@ export function ProjectLightbox({
                   >
                     <img
                       src={item.imageUrl}
-                      alt={item.caption || `صورة ${idx + 1}`}
+                      alt={item.caption || `${idx + 1}`}
                       referrerPolicy="no-referrer"
                     />
                   </button>
@@ -240,21 +244,29 @@ export function ProjectLightbox({
 
             <div className="lightbox-specs">
               <div className="spec-row">
-                <span className="spec-key">التخصص</span>
+                <span className="spec-key">
+                  {lang === 'ar' ? 'التخصص' : 'Catégorie'}
+                </span>
                 <span className="spec-val">
-                  {CATEGORY_LABELS[project.category]}
+                  {getCategoryLabel(project.category, lang)}
                 </span>
               </div>
               <div className="spec-row">
-                <span className="spec-key">الموقع</span>
+                <span className="spec-key">
+                  {lang === 'ar' ? 'الموقع' : 'Localisation'}
+                </span>
                 <span className="spec-val">{project.location}</span>
               </div>
               <div className="spec-row">
-                <span className="spec-key">المساحة</span>
+                <span className="spec-key">
+                  {lang === 'ar' ? 'المساحة' : 'Surface'}
+                </span>
                 <span className="spec-val tabular-nums">{project.areaSqm}</span>
               </div>
               <div className="spec-row">
-                <span className="spec-key">عدد الصور</span>
+                <span className="spec-key">
+                  {lang === 'ar' ? 'عدد الصور' : 'Photos'}
+                </span>
                 <span className="spec-val tabular-nums">{allPhotos.length}</span>
               </div>
             </div>
@@ -263,21 +275,35 @@ export function ProjectLightbox({
               <div className="lightbox-manage-box">
                 <div className="lightbox-add-photo">
                   <label className="form-label" htmlFor="extra-photo-caption">
-                    إضافة صورة جديدة لهذا المشروع
+                    {lang === 'ar'
+                      ? 'إضافة صورة جديدة لهذا المشروع'
+                      : 'Ajouter une photo au projet'}
                   </label>
                   <div className="extra-photo-controls">
                     <input
                       id="extra-photo-caption"
                       type="text"
                       className="form-input"
-                      placeholder="وصف مختصر للصورة (اختياري)"
+                      placeholder={
+                        lang === 'ar'
+                          ? 'وصف مختصر للصورة (اختياري)'
+                          : 'Légende courte (optionnel)'
+                      }
                       maxLength={200}
                       value={photoCaption}
                       onChange={(e) => setPhotoCaption(e.target.value)}
                     />
                     <label className="btn btn-ghost btn-sm upload-label">
                       <Upload size={15} />
-                      <span>{addingPhoto ? 'جاري الرفع...' : 'رفع صورة'}</span>
+                      <span>
+                        {addingPhoto
+                          ? lang === 'ar'
+                            ? 'جاري الرفع...'
+                            : 'Envoi...'
+                          : lang === 'ar'
+                            ? 'رفع صورة'
+                            : 'Importer'}
+                      </span>
                       <input
                         type="file"
                         accept="image/*"
@@ -297,7 +323,9 @@ export function ProjectLightbox({
                     onClick={() => onEdit(project)}
                   >
                     <Pencil size={15} />
-                    <span>تعديل المشروع</span>
+                    <span>
+                      {lang === 'ar' ? 'تعديل المشروع' : 'Modifier'}
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -305,7 +333,7 @@ export function ProjectLightbox({
                     onClick={() => onDelete(project)}
                   >
                     <Trash2 size={15} />
-                    <span>حذف المشروع</span>
+                    <span>{lang === 'ar' ? 'حذف المشروع' : 'Supprimer'}</span>
                   </button>
                 </div>
               </div>
@@ -313,8 +341,9 @@ export function ProjectLightbox({
 
             {project.isCurated && (
               <p className="curated-note">
-                نموذج مرجعي من أعمال اخدم دارك dz darkom pro. يمكنك تسجيل الدخول
-                لإضافة مشاريعك وصورك الحية إلى المعرض العام.
+                {lang === 'ar'
+                  ? 'نموذج مرجعي من استوديو اخدم دارك dz darkom pro. سجّل الدخول لنشر أعمالك الحقيقية.'
+                  : 'Modèle de référence dz darkom pro. Connectez-vous pour publier vos chantiers réels.'}
               </p>
             )}
           </div>

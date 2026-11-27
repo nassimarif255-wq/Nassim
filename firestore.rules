@@ -34,8 +34,22 @@ service cloud.firestore {
       );
     }
 
-    function isValidCategory(cat) {
-      return cat in ['ceramics', 'construction', 'renovation', 'kitchen_bath', 'facades'];
+    function isValidServiceCategory(cat) {
+      return cat in [
+        'construction_renovation',
+        'ceramics',
+        'electricity',
+        'plumbing',
+        'carpentry',
+        'painting',
+        'hvac',
+        'solar'
+      ];
+    }
+
+    function isValidProjectCategory(cat) {
+      return isValidServiceCategory(cat) ||
+        cat in ['construction', 'renovation', 'kitchen_bath', 'facades'];
     }
 
     function isValidImageUri(uri) {
@@ -43,6 +57,10 @@ service cloud.firestore {
         uri.size() >= 10 &&
         uri.size() <= 450000 &&
         (uri.matches('^https://.*') || uri.matches('^data:image/(jpeg|jpg|png|webp);base64,.*'));
+    }
+
+    function isOptionalImageUri(uri) {
+      return uri is string && (uri.size() == 0 || isValidImageUri(uri));
     }
 
     // Validation Blueprint: Project
@@ -58,7 +76,7 @@ service cloud.firestore {
           'createdAt', 'updatedAt'
         ]) &&
         data.title is string && data.title.size() >= 3 && data.title.size() <= 120 &&
-        isValidCategory(data.category) &&
+        isValidProjectCategory(data.category) &&
         data.location is string && data.location.size() >= 2 && data.location.size() <= 80 &&
         data.areaSqm is string && data.areaSqm.size() >= 1 && data.areaSqm.size() <= 30 &&
         data.description is string && data.description.size() >= 5 && data.description.size() <= 1500 &&
@@ -69,8 +87,8 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
-    // Validation Blueprint: ProjectPhoto
-    function isValidProjectPhoto(data) {
+    // Validation Blueprint: Photo Subcollection Item
+    function isValidPhotoItem(data) {
       return data.keys().hasAll(['imageUrl', 'caption', 'ownerId', 'createdAt']) &&
         data.keys().hasOnly(['imageUrl', 'caption', 'ownerId', 'createdAt']) &&
         isValidImageUri(data.imageUrl) &&
@@ -79,22 +97,100 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
+    // Validation Blueprint: ArtisanProfile (No PII)
+    function isValidArtisan(data) {
+      return data.keys().hasAll([
+          'displayName', 'profession', 'experienceYears',
+          'wilaya', 'commune', 'bio', 'avatarUrl',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'displayName', 'profession', 'experienceYears',
+          'wilaya', 'commune', 'bio', 'avatarUrl',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100 &&
+        isValidServiceCategory(data.profession) &&
+        data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 80 &&
+        data.wilaya is string && data.wilaya.size() >= 2 && data.wilaya.size() <= 60 &&
+        data.commune is string && data.commune.size() >= 2 && data.commune.size() <= 60 &&
+        data.bio is string && data.bio.size() >= 10 && data.bio.size() <= 1200 &&
+        isOptionalImageUri(data.avatarUrl) &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: ServiceRequest (No PII)
+    function isValidServiceRequest(data) {
+      return data.keys().hasAll([
+          'title', 'category', 'wilaya', 'commune',
+          'description', 'coverImage', 'status',
+          'ownerId', 'ownerName', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'category', 'wilaya', 'commune',
+          'description', 'coverImage', 'status',
+          'ownerId', 'ownerName', 'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 3 && data.title.size() <= 120 &&
+        isValidServiceCategory(data.category) &&
+        data.wilaya is string && data.wilaya.size() >= 2 && data.wilaya.size() <= 60 &&
+        data.commune is string && data.commune.size() >= 2 && data.commune.size() <= 60 &&
+        data.description is string && data.description.size() >= 10 && data.description.size() <= 1500 &&
+        isOptionalImageUri(data.coverImage) &&
+        data.status in ['open', 'in_progress', 'closed'] &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: Private Inquiry / Direct Message
+    function isValidInquiry(data) {
+      return data.keys().hasAll([
+          'senderId', 'senderName', 'recipientOwnerId', 'recipientName',
+          'contextType', 'contextId', 'contextTitle',
+          'message', 'contactInfo', 'replyText', 'status',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'senderId', 'senderName', 'recipientOwnerId', 'recipientName',
+          'contextType', 'contextId', 'contextTitle',
+          'message', 'contactInfo', 'replyText', 'status',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.senderId is string && isValidId(data.senderId) &&
+        data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100 &&
+        data.recipientOwnerId is string && isValidId(data.recipientOwnerId) &&
+        data.recipientName is string && data.recipientName.size() >= 1 && data.recipientName.size() <= 100 &&
+        data.contextType in ['artisan', 'request'] &&
+        data.contextId is string && isValidId(data.contextId) &&
+        data.contextTitle is string && data.contextTitle.size() >= 1 && data.contextTitle.size() <= 120 &&
+        data.message is string && data.message.size() >= 5 && data.message.size() <= 1000 &&
+        data.contactInfo is string && data.contactInfo.size() <= 120 &&
+        data.replyText is string && data.replyText.size() <= 1000 &&
+        data.status in ['pending', 'replied'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     // Startup connection check document
     match /test/connection {
       allow get: if true;
       allow list, write: if false;
     }
 
-    // Admin registry (read-only for admins; managed out-of-band)
+    // Admin registry
     match /admins/{adminId} {
       allow get: if isValidId(adminId) && isVerifiedUser() && request.auth.uid == adminId;
       allow list, write: if false;
     }
 
-    // Public Projects Showcase
+    // 1. Public Projects Showcase (No PII; intentionally public read)
     match /projects/{projectId} {
       allow get: if isValidId(projectId);
-      allow list: if resource.data.title is string;
+      allow list: if true;
 
       allow create: if isVerifiedUser() &&
         isValidId(projectId) &&
@@ -119,15 +215,14 @@ service cloud.firestore {
         isValidId(projectId) &&
         (existing().ownerId == request.auth.uid || isAdmin());
 
-      // Subcollection: Additional Photos for a Project (Master Gate)
       match /photos/{photoId} {
         allow get: if isValidId(projectId) && isValidId(photoId);
-        allow list: if resource.data.imageUrl is string;
+        allow list: if true;
 
         allow create: if isVerifiedUser() &&
           isValidId(projectId) &&
           isValidId(photoId) &&
-          isValidProjectPhoto(incoming()) &&
+          isValidPhotoItem(incoming()) &&
           incoming().ownerId == request.auth.uid &&
           incoming().createdAt == request.time &&
           exists(/databases/$(database)/documents/projects/$(projectId)) &&
@@ -146,6 +241,177 @@ service cloud.firestore {
             isAdmin()
           );
       }
+    }
+
+    // 2. Public Artisans / Tradespeople Directory (No PII; intentionally public read)
+    match /artisans/{artisanId} {
+      allow get: if isValidId(artisanId);
+      allow list: if true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(artisanId) &&
+        isValidArtisan(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(artisanId) &&
+        isValidArtisan(incoming()) &&
+        (existing().ownerId == request.auth.uid || isAdmin()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'profession', 'experienceYears',
+          'wilaya', 'commune', 'bio', 'avatarUrl', 'updatedAt'
+        ]);
+
+      allow delete: if isVerifiedUser() &&
+        isValidId(artisanId) &&
+        (existing().ownerId == request.auth.uid || isAdmin());
+
+      match /photos/{photoId} {
+        allow get: if isValidId(artisanId) && isValidId(photoId);
+        allow list: if true;
+
+        allow create: if isVerifiedUser() &&
+          isValidId(artisanId) &&
+          isValidId(photoId) &&
+          isValidPhotoItem(incoming()) &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/artisans/$(artisanId)) &&
+          (
+            get(/databases/$(database)/documents/artisans/$(artisanId)).data.ownerId == request.auth.uid ||
+            isAdmin()
+          );
+
+        allow delete: if isVerifiedUser() &&
+          isValidId(artisanId) &&
+          isValidId(photoId) &&
+          exists(/databases/$(database)/documents/artisans/$(artisanId)) &&
+          (
+            existing().ownerId == request.auth.uid ||
+            get(/databases/$(database)/documents/artisans/$(artisanId)).data.ownerId == request.auth.uid ||
+            isAdmin()
+          );
+      }
+    }
+
+    // 3. Public Customer Service Requests Board (No PII; intentionally public read)
+    match /requests/{requestId} {
+      allow get: if isValidId(requestId);
+      allow list: if true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        isValidServiceRequest(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().status == 'open' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        isValidServiceRequest(incoming()) &&
+        (
+          isAdmin() ||
+          (
+            existing().ownerId == request.auth.uid &&
+            existing().status != 'closed' &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'category', 'wilaya', 'commune',
+              'description', 'coverImage', 'status', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        (existing().ownerId == request.auth.uid || isAdmin());
+
+      match /photos/{photoId} {
+        allow get: if isValidId(requestId) && isValidId(photoId);
+        allow list: if true;
+
+        allow create: if isVerifiedUser() &&
+          isValidId(requestId) &&
+          isValidId(photoId) &&
+          isValidPhotoItem(incoming()) &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/requests/$(requestId)) &&
+          (
+            get(/databases/$(database)/documents/requests/$(requestId)).data.ownerId == request.auth.uid ||
+            isAdmin()
+          );
+
+        allow delete: if isVerifiedUser() &&
+          isValidId(requestId) &&
+          isValidId(photoId) &&
+          exists(/databases/$(database)/documents/requests/$(requestId)) &&
+          (
+            existing().ownerId == request.auth.uid ||
+            get(/databases/$(database)/documents/requests/$(requestId)).data.ownerId == request.auth.uid ||
+            isAdmin()
+          );
+      }
+    }
+
+    // 4. Private Customer <-> Professional Inquiries (Strictly Isolated)
+    match /inquiries/{inquiryId} {
+      allow get: if isValidId(inquiryId) &&
+        isVerifiedUser() &&
+        (
+          existing().senderId == request.auth.uid ||
+          existing().recipientOwnerId == request.auth.uid ||
+          isAdmin()
+        );
+
+      allow list: if isVerifiedUser() &&
+        (
+          resource.data.senderId == request.auth.uid ||
+          resource.data.recipientOwnerId == request.auth.uid ||
+          request.auth.token.email == 'nassimarif255@gmail.com'
+        );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(inquiryId) &&
+        isValidInquiry(incoming()) &&
+        incoming().senderId == request.auth.uid &&
+        incoming().senderId != incoming().recipientOwnerId &&
+        incoming().status == 'pending' &&
+        incoming().replyText == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(inquiryId) &&
+        isValidInquiry(incoming()) &&
+        (
+          isAdmin() ||
+          (
+            existing().recipientOwnerId == request.auth.uid &&
+            existing().status != 'replied' &&
+            incoming().status == 'replied' &&
+            incoming().replyText.size() >= 1 &&
+            incoming().senderId == existing().senderId &&
+            incoming().recipientOwnerId == existing().recipientOwnerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'replyText', 'status', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isVerifiedUser() &&
+        isValidId(inquiryId) &&
+        (existing().senderId == request.auth.uid || isAdmin());
     }
   }
 }
