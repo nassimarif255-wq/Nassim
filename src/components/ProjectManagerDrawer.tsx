@@ -20,6 +20,7 @@ import {
   Plus,
   ImagePlus,
   Send,
+  ShieldCheck,
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
@@ -27,6 +28,8 @@ import {
   InquiryRecord,
   ProjectCategory,
   ProjectRecord,
+  TeamServiceGuideRecord,
+  TeamSkillRecord,
 } from '../data/showcaseDefaults';
 import {
   AppLang,
@@ -35,8 +38,9 @@ import {
 } from '../data/i18n';
 import { ALGERIA_WILAYAS } from '../data/algeriaLocations';
 import { compressImageFile } from '../utils/imageProcessor';
+import { AdminDashboardTab } from './AdminDashboardTab';
 
-export type PortalTab = 'project' | 'artisan' | 'request' | 'messages';
+export type PortalTab = 'project' | 'artisan' | 'request' | 'messages' | 'admin';
 
 interface ProjectManagerDrawerProps {
   open: boolean;
@@ -49,6 +53,10 @@ interface ProjectManagerDrawerProps {
   editingArtisan: ArtisanRecord | null;
   userProjects: ProjectRecord[];
   userArtisans: ArtisanRecord[];
+  allArtisans: ArtisanRecord[];
+  firestoreSkills: TeamSkillRecord[];
+  firestoreServices: TeamServiceGuideRecord[];
+  hasFirestoreArtisans: boolean;
   onClose: () => void;
   onSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
@@ -58,6 +66,14 @@ interface ProjectManagerDrawerProps {
   onDeleteProject: (project: ProjectRecord) => void;
   onEditArtisan: (artisan: ArtisanRecord) => void;
   onDeleteArtisan: (artisan: ArtisanRecord) => void;
+}
+
+function parseTagInput(raw: string): string[] {
+  return raw
+    .split(/[\n,،]+/)
+    .map((s) => s.trim().slice(0, 80))
+    .filter(Boolean)
+    .slice(0, 12);
 }
 
 export function ProjectManagerDrawer({
@@ -71,6 +87,10 @@ export function ProjectManagerDrawer({
   editingArtisan,
   userProjects,
   userArtisans,
+  allArtisans,
+  firestoreSkills,
+  firestoreServices,
+  hasFirestoreArtisans,
   onClose,
   onSignIn,
   onSignOut,
@@ -91,18 +111,23 @@ export function ProjectManagerDrawer({
   const [projArea, setProjArea] = useState('');
   const [projDesc, setProjDesc] = useState('');
   const [projCover, setProjCover] = useState('');
+  const [projBefore, setProjBefore] = useState('');
+  const [projServicesRaw, setProjServicesRaw] = useState('');
+  const [projArtisanId, setProjArtisanId] = useState('');
   const [projExtras, setProjExtras] = useState<
     { imageUrl: string; caption: string }[]
   >([]);
   const [urlInput, setUrlInput] = useState('');
 
-  // Artisan profile form state
+  // Artisan / Team member profile form state
   const [artName, setArtName] = useState('');
+  const [artRoleTitle, setArtRoleTitle] = useState('');
   const [artProf, setArtProf] = useState<ServiceCategoryId>('ceramics');
   const [artExp, setArtExp] = useState('5');
   const [artWilaya, setArtWilaya] = useState('الجزائر العاصمة');
   const [artCommune, setArtCommune] = useState('حيدرة');
   const [artBio, setArtBio] = useState('');
+  const [artSkillsRaw, setArtSkillsRaw] = useState('');
   const [artAvatar, setArtAvatar] = useState('');
   const [artPhotos, setArtPhotos] = useState<
     { imageUrl: string; caption: string }[]
@@ -150,6 +175,9 @@ export function ProjectManagerDrawer({
       setProjArea(editingProject.areaSqm);
       setProjDesc(editingProject.description);
       setProjCover(editingProject.coverImage);
+      setProjBefore(editingProject.beforeImage || '');
+      setProjServicesRaw((editingProject.completedServices || []).join('، '));
+      setProjArtisanId(editingProject.artisanId || '');
       setProjExtras([]);
       setErrorMsg('');
       setSuccessMsg('');
@@ -160,6 +188,9 @@ export function ProjectManagerDrawer({
       setProjArea('');
       setProjDesc('');
       setProjCover('');
+      setProjBefore('');
+      setProjServicesRaw('');
+      setProjArtisanId('');
       setProjExtras([]);
       setUrlInput('');
     }
@@ -169,22 +200,26 @@ export function ProjectManagerDrawer({
     if (editingArtisan) {
       setActiveTab('artisan');
       setArtName(editingArtisan.displayName);
+      setArtRoleTitle(editingArtisan.roleTitle || '');
       setArtProf(editingArtisan.profession);
       setArtExp(String(editingArtisan.experienceYears));
       setArtWilaya(editingArtisan.wilaya);
       setArtCommune(editingArtisan.commune);
       setArtBio(editingArtisan.bio);
+      setArtSkillsRaw((editingArtisan.skillsList || []).join('، '));
       setArtAvatar(editingArtisan.avatarUrl);
       setArtPhotos([]);
       setErrorMsg('');
       setSuccessMsg('');
     } else {
       setArtName(user?.displayName || '');
+      setArtRoleTitle('');
       setArtProf('ceramics');
       setArtExp('5');
       setArtWilaya('الجزائر العاصمة');
       setArtCommune('حيدرة');
       setArtBio('');
+      setArtSkillsRaw('');
       setArtAvatar('');
       setArtPhotos([]);
     }
@@ -199,7 +234,6 @@ export function ProjectManagerDrawer({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
-  // Listen to private incoming & sent inquiries when signed in
   useEffect(() => {
     if (!user || !user.emailVerified) {
       setIncomingInquiries([]);
@@ -349,12 +383,19 @@ export function ProjectManagerDrawer({
     const cleanLoc = projLocation.trim();
     const cleanArea = projArea.trim();
     const cleanDesc = projDesc.trim();
+    const completedServices = parseTagInput(projServicesRaw);
 
-    if (cleanTitle.length < 3 || cleanLoc.length < 2 || cleanArea.length < 1 || cleanDesc.length < 5 || !projCover) {
+    if (
+      cleanTitle.length < 3 ||
+      cleanLoc.length < 2 ||
+      cleanArea.length < 1 ||
+      cleanDesc.length < 5 ||
+      !projCover
+    ) {
       setErrorMsg(
         lang === 'ar'
-          ? 'يرجى ملء جميع الحقول وإرفاق الصورة الرئيسية.'
-          : 'Veuillez remplir tous les champs et ajouter une photo principale.'
+          ? 'يرجى ملء جميع الحقول وإرفاق الصورة الرئيسية (بعد الأشغال).'
+          : 'Veuillez remplir tous les champs et ajouter la photo finale.'
       );
       return;
     }
@@ -372,6 +413,9 @@ export function ProjectManagerDrawer({
           areaSqm: cleanArea.slice(0, 30),
           description: cleanDesc.slice(0, 1500),
           coverImage: projCover,
+          beforeImage: projBefore,
+          completedServices,
+          artisanId: projArtisanId,
           updatedAt: serverTimestamp(),
         }).catch((err) =>
           handleFirestoreError(err, OperationType.UPDATE, path)
@@ -394,8 +438,11 @@ export function ProjectManagerDrawer({
           areaSqm: cleanArea.slice(0, 30),
           description: cleanDesc.slice(0, 1500),
           coverImage: projCover,
+          beforeImage: projBefore,
+          completedServices,
+          artisanId: projArtisanId,
           ownerId: user.uid,
-          ownerName: (user.displayName || 'عضو اخدم دارك').slice(0, 100),
+          ownerName: (user.displayName || 'فريق اخدم دارك').slice(0, 100),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         }).catch((err) =>
@@ -423,11 +470,14 @@ export function ProjectManagerDrawer({
         setProjArea('');
         setProjDesc('');
         setProjCover('');
+        setProjBefore('');
+        setProjServicesRaw('');
+        setProjArtisanId('');
         setProjExtras([]);
         setSuccessMsg(
           lang === 'ar'
             ? 'تم نشر العمل والصور في المعرض العام.'
-            : 'Réalisation publiée dans la galerie publique.'
+            : 'Réalisation publiée dans la galerie.'
         );
       }
     } finally {
@@ -444,8 +494,14 @@ export function ProjectManagerDrawer({
     const cleanCommune = artCommune.trim();
     const cleanBio = artBio.trim();
     const expNum = Math.max(0, Math.min(80, Number(artExp) || 0));
+    const skillsList = parseTagInput(artSkillsRaw);
 
-    if (cleanName.length < 2 || cleanWilaya.length < 2 || cleanCommune.length < 2 || cleanBio.length < 10) {
+    if (
+      cleanName.length < 2 ||
+      cleanWilaya.length < 2 ||
+      cleanCommune.length < 2 ||
+      cleanBio.length < 10
+    ) {
       setErrorMsg(
         lang === 'ar'
           ? 'يرجى إدخال الاسم، الولاية، البلدية، ونبذة خبرة (10 أحرف على الأقل).'
@@ -462,11 +518,13 @@ export function ProjectManagerDrawer({
         const path = `artisans/${editingArtisan.id}`;
         await updateDoc(doc(db, 'artisans', editingArtisan.id), {
           displayName: cleanName.slice(0, 100),
+          roleTitle: artRoleTitle.trim().slice(0, 100),
           profession: artProf,
           experienceYears: expNum,
           wilaya: cleanWilaya.slice(0, 60),
           commune: cleanCommune.slice(0, 60),
           bio: cleanBio.slice(0, 1200),
+          skillsList,
           avatarUrl: artAvatar,
           updatedAt: serverTimestamp(),
         }).catch((err) =>
@@ -474,8 +532,8 @@ export function ProjectManagerDrawer({
         );
         setSuccessMsg(
           lang === 'ar'
-            ? 'تم تحديث الملف المهني بنجاح.'
-            : 'Profil professionnel mis à jour.'
+            ? 'تم تحديث ملف العضو بنجاح.'
+            : 'Profil membre mis à jour.'
         );
         onClearEditArtisan();
       } else {
@@ -485,11 +543,13 @@ export function ProjectManagerDrawer({
         const path = `artisans/${artisanId}`;
         await setDoc(doc(db, 'artisans', artisanId), {
           displayName: cleanName.slice(0, 100),
+          roleTitle: artRoleTitle.trim().slice(0, 100),
           profession: artProf,
           experienceYears: expNum,
           wilaya: cleanWilaya.slice(0, 60),
           commune: cleanCommune.slice(0, 60),
           bio: cleanBio.slice(0, 1200),
+          skillsList,
           avatarUrl: artAvatar,
           ownerId: user.uid,
           createdAt: serverTimestamp(),
@@ -515,11 +575,13 @@ export function ProjectManagerDrawer({
         }
 
         setArtBio('');
+        setArtRoleTitle('');
+        setArtSkillsRaw('');
         setArtPhotos([]);
         setSuccessMsg(
           lang === 'ar'
-            ? 'تم تسجيل ملفك المهني بنجاح وظهوره في الدليل.'
-            : 'Votre profil professionnel est maintenant publié.'
+            ? 'تم نشر ملف عضو الفريق بنجاح.'
+            : 'Profil membre publié.'
         );
       }
     } finally {
@@ -536,7 +598,12 @@ export function ProjectManagerDrawer({
     const cleanCommune = reqCommune.trim();
     const cleanDesc = reqDesc.trim();
 
-    if (cleanTitle.length < 3 || cleanWilaya.length < 2 || cleanCommune.length < 2 || cleanDesc.length < 10) {
+    if (
+      cleanTitle.length < 3 ||
+      cleanWilaya.length < 2 ||
+      cleanCommune.length < 2 ||
+      cleanDesc.length < 10
+    ) {
       setErrorMsg(
         lang === 'ar'
           ? 'يرجى إدخال عنوان الطلب، المنطقة، ووصف المشكلة (10 أحرف على الأقل).'
@@ -591,8 +658,8 @@ export function ProjectManagerDrawer({
       setReqExtras([]);
       setSuccessMsg(
         lang === 'ar'
-          ? 'تم نشر طلب الخدمة للعامة بنجاح.'
-          : 'Demande de service publiée avec succès.'
+          ? 'تم إرسال طلبك لفريقنا بنجاح.'
+          : 'Demande transmise à notre équipe.'
       );
     } finally {
       setSubmitting(false);
@@ -628,9 +695,13 @@ export function ProjectManagerDrawer({
         <div className="drawer-header">
           <div>
             <h2 id="workspace-drawer-title" className="drawer-title">
-              {lang === 'ar'
-                ? 'بوابة المهنيين والزبائن'
-                : 'Espace Pro & Client'}
+              {isAdmin
+                ? lang === 'ar'
+                  ? 'لوحة إدارة DZ Darkom Pro'
+                  : 'Administration DZ Darkom Pro'
+                : lang === 'ar'
+                  ? 'بوابة الزبائن والفريق'
+                  : 'Espace Client & Équipe'}
             </h2>
             <p className="drawer-subtitle">اخدم دارك dz darkom pro</p>
           </div>
@@ -657,13 +728,13 @@ export function ProjectManagerDrawer({
             <div className="auth-gate">
               <h3>
                 {lang === 'ar'
-                  ? 'تسجيل دخول المستخدم'
-                  : 'Connexion utilisateur'}
+                  ? 'تسجيل دخول المستخدم أو الإدارة'
+                  : 'Connexion Admin / Client'}
               </h3>
               <p>
                 {lang === 'ar'
-                  ? 'تصفح الأعمال، المهنيين وطلبات الزبائن متاح للجميع. سجّل الدخول بحساب Google لإضافة صور وأعمال، إنشاء ملفك المهني، نشر طلب خدمة، أو مراسلة الحرفيين.'
-                  : 'La consultation est publique. Connectez-vous avec Google pour publier des réalisations, créer votre profil artisan, déposer une demande ou contacter un professionnel.'}
+                  ? 'تصفح المهارات، شرح الخدمات، ملفات الفريق، ومعرض قبل وبعد متاح للجميع. سجّل الدخول لإرسال طلب معاينة لفريقنا أو إدارة محتوى الموقع (للمدير).'
+                  : 'La consultation est publique. Connectez-vous avec Google pour envoyer une demande ou gérer le site (Admin).'}
               </p>
               <button
                 type="button"
@@ -701,7 +772,7 @@ export function ProjectManagerDrawer({
                     <div className="user-meta">
                       {isAdmin
                         ? lang === 'ar'
-                          ? 'مدير المنصة'
+                          ? 'مدير الفريق'
                           : 'Admin'
                         : lang === 'ar'
                           ? 'حساب مفعل'
@@ -720,7 +791,28 @@ export function ProjectManagerDrawer({
                 </button>
               </div>
 
-              <div className="portal-tabs" role="tablist">
+              <div
+                className={`portal-tabs${isAdmin ? ' has-5' : ''}`}
+                role="tablist"
+              >
+                {isAdmin && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'admin'}
+                    className={`portal-tab${
+                      activeTab === 'admin' ? ' is-active' : ''
+                    }`}
+                    onClick={() => {
+                      setActiveTab('admin');
+                      setErrorMsg('');
+                      setSuccessMsg('');
+                    }}
+                  >
+                    <ShieldCheck size={13} style={{ display: 'inline', marginInlineEnd: 4 }} />
+                    {lang === 'ar' ? 'الإدارة' : 'Admin'}
+                  </button>
+                )}
                 <button
                   type="button"
                   role="tab"
@@ -734,7 +826,7 @@ export function ProjectManagerDrawer({
                     setSuccessMsg('');
                   }}
                 >
-                  {lang === 'ar' ? 'نشر عمل' : 'Réalisation'}
+                  {lang === 'ar' ? 'المشاريع' : 'Projets'}
                 </button>
                 <button
                   type="button"
@@ -749,7 +841,7 @@ export function ProjectManagerDrawer({
                     setSuccessMsg('');
                   }}
                 >
-                  {lang === 'ar' ? 'ملف مهني' : 'Profil pro'}
+                  {lang === 'ar' ? 'الفريق' : 'Équipe'}
                 </button>
                 <button
                   type="button"
@@ -785,6 +877,18 @@ export function ProjectManagerDrawer({
                 </button>
               </div>
 
+              {activeTab === 'admin' && isAdmin && (
+                <AdminDashboardTab
+                  user={user}
+                  lang={lang}
+                  firestoreSkills={firestoreSkills}
+                  firestoreServices={firestoreServices}
+                  hasFirestoreArtisans={hasFirestoreArtisans}
+                  onGoToArtisansTab={() => setActiveTab('artisan')}
+                  onGoToProjectsTab={() => setActiveTab('project')}
+                />
+              )}
+
               {activeTab === 'project' && (
                 <>
                   <form className="project-form" onSubmit={handleProjectSubmit}>
@@ -792,11 +896,11 @@ export function ProjectManagerDrawer({
                       <h3 className="form-heading">
                         {editingProject
                           ? lang === 'ar'
-                            ? 'تعديل العمل'
+                            ? 'تعديل المشروع'
                             : 'Modifier le projet'
                           : lang === 'ar'
-                            ? 'إضافة عمل وصور جديدة'
-                            : 'Ajouter une réalisation'}
+                            ? 'إضافة مشروع وصور قبل/بعد'
+                            : 'Ajouter un projet Avant/Après'}
                       </h3>
                       {editingProject && (
                         <button
@@ -811,7 +915,7 @@ export function ProjectManagerDrawer({
 
                     <div className="form-field">
                       <label className="form-label" htmlFor="proj-title">
-                        {lang === 'ar' ? 'عنوان العمل' : 'Titre du chantier'}
+                        {lang === 'ar' ? 'عنوان المشروع' : 'Titre du chantier'}
                       </label>
                       <input
                         id="proj-title"
@@ -827,7 +931,7 @@ export function ProjectManagerDrawer({
                     <div className="form-row-2">
                       <div className="form-field">
                         <label className="form-label" htmlFor="proj-cat">
-                          {lang === 'ar' ? 'التخصص' : 'Métier'}
+                          {lang === 'ar' ? 'التخصص' : 'Spécialité'}
                         </label>
                         <select
                           id="proj-cat"
@@ -846,7 +950,7 @@ export function ProjectManagerDrawer({
                       </div>
                       <div className="form-field">
                         <label className="form-label" htmlFor="proj-area">
-                          {lang === 'ar' ? 'المساحة / الحجم' : 'Surface / Portée'}
+                          {lang === 'ar' ? 'المساحة / الحجم' : 'Surface'}
                         </label>
                         <input
                           id="proj-area"
@@ -861,23 +965,69 @@ export function ProjectManagerDrawer({
                       </div>
                     </div>
 
+                    <div className="form-row-2">
+                      <div className="form-field">
+                        <label className="form-label" htmlFor="proj-loc">
+                          {lang === 'ar' ? 'الولاية والبلدية' : 'Wilaya & Commune'}
+                        </label>
+                        <input
+                          id="proj-loc"
+                          type="text"
+                          className="form-input"
+                          placeholder={
+                            lang === 'ar'
+                              ? 'حيدرة، الجزائر العاصمة'
+                              : 'Hydra, Alger'
+                          }
+                          maxLength={80}
+                          required
+                          value={projLocation}
+                          onChange={(e) => setProjLocation(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-field">
+                        <label className="form-label" htmlFor="proj-artisan">
+                          {lang === 'ar'
+                            ? 'عضو الفريق المنفذ (اختياري)'
+                            : 'Membre responsable'}
+                        </label>
+                        <select
+                          id="proj-artisan"
+                          className="form-input"
+                          value={projArtisanId}
+                          onChange={(e) => setProjArtisanId(e.target.value)}
+                        >
+                          <option value="">
+                            {lang === 'ar' ? 'فريق اخدم دارك' : 'Équipe DZ Darkom'}
+                          </option>
+                          {allArtisans
+                            .filter((a) => !a.isCurated)
+                            .map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.displayName}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+
                     <div className="form-field">
-                      <label className="form-label" htmlFor="proj-loc">
-                        {lang === 'ar' ? 'الولاية والبلدية' : 'Wilaya & Commune'}
+                      <label className="form-label" htmlFor="proj-services">
+                        {lang === 'ar'
+                          ? 'الخدمات المنجزة (افصل بفاصلة ،)'
+                          : 'Prestations réalisées (séparées par virgule)'}
                       </label>
                       <input
-                        id="proj-loc"
+                        id="proj-services"
                         type="text"
                         className="form-input"
                         placeholder={
                           lang === 'ar'
-                            ? 'حيدرة، الجزائر العاصمة'
-                            : 'Hydra, Alger'
+                            ? 'تبليط بورسلان، عزل مائي، إنارة مخفية'
+                            : 'Carrelage, étanchéité, éclairage LED'
                         }
-                        maxLength={80}
-                        required
-                        value={projLocation}
-                        onChange={(e) => setProjLocation(e.target.value)}
+                        value={projServicesRaw}
+                        onChange={(e) => setProjServicesRaw(e.target.value)}
                       />
                     </div>
 
@@ -898,7 +1048,9 @@ export function ProjectManagerDrawer({
 
                     <div className="form-field">
                       <span className="form-label">
-                        {lang === 'ar' ? 'الصورة الرئيسية' : 'Photo principale'}
+                        {lang === 'ar'
+                          ? 'الصورة الرئيسية (بعد الأشغال)'
+                          : 'Photo principale (Après travaux)'}
                       </span>
                       <div className="upload-box">
                         <label className="btn btn-ghost btn-sm upload-label">
@@ -951,11 +1103,50 @@ export function ProjectManagerDrawer({
                       </div>
                       {projCover && (
                         <div className="cover-preview">
-                          <img src={projCover} alt="Preview" />
+                          <img src={projCover} alt="Preview After" />
                           <button
                             type="button"
                             className="cover-remove"
                             onClick={() => setProjCover('')}
+                          >
+                            {lang === 'ar' ? 'إزالة' : 'Retirer'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="form-field">
+                      <span className="form-label">
+                        {lang === 'ar'
+                          ? 'صورة قبل الأشغال (للمقارنة التفاعلية - اختياري)'
+                          : 'Photo Avant travaux (optionnel)'}
+                      </span>
+                      <label className="btn btn-ghost btn-sm upload-label">
+                        <Upload size={15} />
+                        <span>
+                          {lang === 'ar'
+                            ? 'رفع صورة قبل الأشغال'
+                            : 'Importer photo Avant'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          hidden
+                          disabled={processingImg}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (f) void processSingleFile(f, setProjBefore);
+                          }}
+                        />
+                      </label>
+                      {projBefore && (
+                        <div className="cover-preview">
+                          <img src={projBefore} alt="Preview Before" />
+                          <button
+                            type="button"
+                            className="cover-remove"
+                            onClick={() => setProjBefore('')}
                           >
                             {lang === 'ar' ? 'إزالة' : 'Retirer'}
                           </button>
@@ -1033,7 +1224,7 @@ export function ProjectManagerDrawer({
                               ? 'حفظ التعديلات'
                               : 'Enregistrer'
                             : lang === 'ar'
-                              ? 'نشر العمل في المعرض'
+                              ? 'نشر المشروع في المعرض'
                               : 'Publier le projet'}
                       </span>
                     </button>
@@ -1043,8 +1234,8 @@ export function ProjectManagerDrawer({
                     <div className="user-projects-list">
                       <h3 className="form-heading">
                         {lang === 'ar'
-                          ? `أعمالي (${userProjects.length})`
-                          : `Mes projets (${userProjects.length})`}
+                          ? `المشاريع المنشورة (${userProjects.length})`
+                          : `Projets publiés (${userProjects.length})`}
                       </h3>
                       {userProjects.map((proj) => (
                         <div key={proj.id} className="user-proj-row">
@@ -1089,11 +1280,11 @@ export function ProjectManagerDrawer({
                       <h3 className="form-heading">
                         {editingArtisan
                           ? lang === 'ar'
-                            ? 'تعديل الملف المهني'
-                            : 'Modifier le profil pro'
+                            ? 'تعديل ملف عضو الفريق'
+                            : 'Modifier le profil membre'
                           : lang === 'ar'
-                            ? 'إنشاء ملف مهني / حرفي'
-                            : 'Créer un profil artisan'}
+                            ? 'إضافة عضو / حرفي إلى الفريق'
+                            : 'Ajouter un artisan de l’équipe'}
                       </h3>
                       {editingArtisan && (
                         <button
@@ -1106,27 +1297,47 @@ export function ProjectManagerDrawer({
                       )}
                     </div>
 
-                    <div className="form-field">
-                      <label className="form-label" htmlFor="art-name">
-                        {lang === 'ar'
-                          ? 'الاسم أو اسم الورشة'
-                          : 'Nom ou entreprise'}
-                      </label>
-                      <input
-                        id="art-name"
-                        type="text"
-                        className="form-input"
-                        maxLength={100}
-                        required
-                        value={artName}
-                        onChange={(e) => setArtName(e.target.value)}
-                      />
+                    <div className="form-row-2">
+                      <div className="form-field">
+                        <label className="form-label" htmlFor="art-name">
+                          {lang === 'ar' ? 'اسم العضو / الحرفي' : 'Nom du membre'}
+                        </label>
+                        <input
+                          id="art-name"
+                          type="text"
+                          className="form-input"
+                          maxLength={100}
+                          required
+                          value={artName}
+                          onChange={(e) => setArtName(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-field">
+                        <label className="form-label" htmlFor="art-role">
+                          {lang === 'ar'
+                            ? 'الصفة / الدور في الفريق'
+                            : 'Rôle dans l’équipe'}
+                        </label>
+                        <input
+                          id="art-role"
+                          type="text"
+                          className="form-input"
+                          placeholder={
+                            lang === 'ar'
+                              ? 'مثال: رئيس ورشة السيراميك'
+                              : 'Ex : Chef d’équipe carrelage'
+                          }
+                          maxLength={100}
+                          value={artRoleTitle}
+                          onChange={(e) => setArtRoleTitle(e.target.value)}
+                        />
+                      </div>
                     </div>
 
                     <div className="form-row-2">
                       <div className="form-field">
                         <label className="form-label" htmlFor="art-prof">
-                          {lang === 'ar' ? 'التخصص المهني' : 'Métier'}
+                          {lang === 'ar' ? 'التخصص المهني' : 'Spécialité'}
                         </label>
                         <select
                           id="art-prof"
@@ -1210,10 +1421,30 @@ export function ProjectManagerDrawer({
                     </div>
 
                     <div className="form-field">
+                      <label className="form-label" htmlFor="art-skills">
+                        {lang === 'ar'
+                          ? 'المهارات المتقنة (افصل بفاصلة ،)'
+                          : 'Compétences maîtrisées (séparées par virgule)'}
+                      </label>
+                      <input
+                        id="art-skills"
+                        type="text"
+                        className="form-input"
+                        placeholder={
+                          lang === 'ar'
+                            ? 'بورسلان 120×240، لحام TIG، عزل مائي'
+                            : 'Grès cérame, soudure TIG, étanchéité'
+                        }
+                        value={artSkillsRaw}
+                        onChange={(e) => setArtSkillsRaw(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="form-field">
                       <label className="form-label" htmlFor="art-bio">
                         {lang === 'ar'
-                          ? 'نبذة عن الخبرة والخدمات المقدمة'
-                          : 'Présentation et compétences'}
+                          ? 'نبذة عن الخبرة والأعمال'
+                          : 'Présentation et parcours'}
                       </label>
                       <textarea
                         id="art-bio"
@@ -1231,8 +1462,8 @@ export function ProjectManagerDrawer({
                         <Upload size={15} />
                         <span>
                           {lang === 'ar'
-                            ? 'صورة شخصية أو شعار الورشة'
-                            : 'Photo de profil / logo'}
+                            ? 'صورة العضو'
+                            : 'Photo du membre'}
                         </span>
                         <input
                           type="file"
@@ -1327,11 +1558,11 @@ export function ProjectManagerDrawer({
                             : 'Enregistrement...'
                           : editingArtisan
                             ? lang === 'ar'
-                              ? 'حفظ تعديلات الملف'
+                              ? 'حفظ تعديلات العضو'
                               : 'Mettre à jour le profil'
                             : lang === 'ar'
-                              ? 'نشر الملف المهني'
-                              : 'Publier mon profil pro'}
+                              ? 'نشر ملف العضو'
+                              : 'Publier le membre'}
                       </span>
                     </button>
                   </form>
@@ -1339,7 +1570,7 @@ export function ProjectManagerDrawer({
                   {userArtisans.length > 0 && (
                     <div className="user-projects-list">
                       <h3 className="form-heading">
-                        {lang === 'ar' ? 'ملفاتي المهنية' : 'Mes profils pro'}
+                        {lang === 'ar' ? 'ملفات الفريق' : 'Membres de l’équipe'}
                       </h3>
                       {userArtisans.map((art) => (
                         <div key={art.id} className="user-proj-row">
@@ -1378,13 +1609,13 @@ export function ProjectManagerDrawer({
                 <form className="project-form" onSubmit={handleRequestSubmit}>
                   <h3 className="form-heading">
                     {lang === 'ar'
-                      ? 'نشر طلب خدمة للزبائن'
-                      : 'Publier une demande de service'}
+                      ? 'إرسال طلب معاينة أو خدمة لفريقنا'
+                      : 'Envoyer une demande à notre équipe'}
                   </h3>
 
                   <div className="form-field">
                     <label className="form-label" htmlFor="req-title">
-                      {lang === 'ar' ? 'عنوان المشكلة أو الخدمة' : 'Objet de la demande'}
+                      {lang === 'ar' ? 'عنوان الطلب أو المشروع' : 'Objet de la demande'}
                     </label>
                     <input
                       id="req-title"
@@ -1392,8 +1623,8 @@ export function ProjectManagerDrawer({
                       className="form-input"
                       placeholder={
                         lang === 'ar'
-                          ? 'مثال: تجديد سيراميك الحمام وإصلاح السباكة'
-                          : 'Ex : Rénovation carrelage salle de bain'
+                          ? 'مثال: تجديد سيراميك الحمام أو لحام بوابة حديدية'
+                          : 'Ex : Rénovation carrelage ou portail soudé'
                       }
                       maxLength={120}
                       required
@@ -1404,7 +1635,7 @@ export function ProjectManagerDrawer({
 
                   <div className="form-field">
                     <label className="form-label" htmlFor="req-cat">
-                      {lang === 'ar' ? 'التخصص المطلوب' : 'Métier recherché'}
+                      {lang === 'ar' ? 'التخصص المطلوب' : 'Spécialité recherchée'}
                     </label>
                     <select
                       id="req-cat"
@@ -1474,7 +1705,7 @@ export function ProjectManagerDrawer({
                   <div className="form-field">
                     <label className="form-label" htmlFor="req-desc">
                       {lang === 'ar'
-                        ? 'وصف المشكلة والتفاصيل'
+                        ? 'وصف المشروع أو المشكلة'
                         : 'Description du besoin'}
                     </label>
                     <textarea
@@ -1493,7 +1724,7 @@ export function ProjectManagerDrawer({
                       <Upload size={15} />
                       <span>
                         {lang === 'ar'
-                          ? 'إرفاق صورة رئيسية للمشكلة'
+                          ? 'إرفاق صورة رئيسية للموقع'
                           : 'Joindre une photo principale'}
                       </span>
                       <input
@@ -1564,11 +1795,11 @@ export function ProjectManagerDrawer({
                     <span>
                       {submitting
                         ? lang === 'ar'
-                          ? 'جاري النشر...'
-                          : 'Publication...'
+                          ? 'جاري الإرسال...'
+                          : 'Envoi...'
                         : lang === 'ar'
-                          ? 'نشر الطلب للمهنيين'
-                          : 'Publier la demande'}
+                          ? 'إرسال الطلب للفريق'
+                          : 'Envoyer la demande'}
                     </span>
                   </button>
                 </form>

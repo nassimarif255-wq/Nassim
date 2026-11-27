@@ -51,7 +51,7 @@ export function ArtisanProfileModal({
   const [photoError, setPhotoError] = useState('');
 
   useEffect(() => {
-    if (!artisan) {
+    if (!artisan || artisan.isCurated) {
       setPhotos([]);
       return;
     }
@@ -92,6 +92,7 @@ export function ArtisanProfileModal({
   if (!artisan) return null;
 
   const canManage =
+    !artisan.isCurated &&
     !!user &&
     user.emailVerified &&
     (artisan.ownerId === user.uid || isAdmin);
@@ -99,7 +100,7 @@ export function ArtisanProfileModal({
   const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || !user) return;
+    if (!file || !user || artisan.isCurated) return;
 
     setPhotoError('');
     setUploading(true);
@@ -128,6 +129,7 @@ export function ArtisanProfileModal({
   };
 
   const handleDeletePhoto = async (photoId: string) => {
+    if (artisan.isCurated) return;
     const path = `artisans/${artisan.id}/photos/${photoId}`;
     await deleteDoc(doc(db, 'artisans', artisan.id, 'photos', photoId)).catch(
       (err) => handleFirestoreError(err, OperationType.DELETE, path)
@@ -169,15 +171,21 @@ export function ArtisanProfileModal({
         <div className="lightbox-body">
           <div className="lightbox-media-col">
             <h3 className="form-heading">
-              {lang === 'ar' ? 'معرض صور أعمال الحرفي' : 'Photos des réalisations'}
+              {lang === 'ar'
+                ? 'أعمال العضو ومعرض الصور'
+                : 'Réalisations & photos du membre'}
             </h3>
 
             {photos.length === 0 ? (
               <div className="gallery-empty">
                 <p>
                   {lang === 'ar'
-                    ? 'لم يضف الحرفي صوراً داخل الملف الشخصي بعد.'
-                    : 'Aucune photo ajoutée sur ce profil pour le moment.'}
+                    ? linkedProjects.length > 0
+                      ? 'استعرض المشاريع المنشورة أدناه لمعاينة أعمال هذا العضو قبل وبعد.'
+                      : 'لم تُضف صور إضافية داخل هذا الملف بعد.'
+                    : linkedProjects.length > 0
+                      ? 'Consultez les projets liés ci-dessous pour voir les réalisations avant/après.'
+                      : 'Aucune photo supplémentaire ajoutée pour le moment.'}
                 </p>
               </div>
             ) : (
@@ -210,8 +218,8 @@ export function ArtisanProfileModal({
               <div className="linked-works-box">
                 <h4 className="form-label">
                   {lang === 'ar'
-                    ? `المشاريع المنشورة (${linkedProjects.length})`
-                    : `Projets publiés (${linkedProjects.length})`}
+                    ? `المشاريع السابقة المنجزة (${linkedProjects.length})`
+                    : `Projets réalisés (${linkedProjects.length})`}
                 </h4>
                 <div className="linked-works-row">
                   {linkedProjects.map((proj) => (
@@ -253,26 +261,43 @@ export function ArtisanProfileModal({
                   {artisan.displayName}
                 </h2>
                 <p className="project-meta-line">
-                  {getCategoryLabel(artisan.profession, lang)} ·{' '}
-                  {artisan.wilaya}
+                  {artisan.roleTitle || getCategoryLabel(artisan.profession, lang)}{' '}
+                  · {artisan.wilaya}
                 </p>
               </div>
             </div>
 
             <p className="lightbox-desc">{artisan.bio}</p>
 
+            {artisan.skillsList && artisan.skillsList.length > 0 && (
+              <div className="completed-services-box">
+                <h3 className="form-label">
+                  {lang === 'ar' ? 'المهارات المتقنة' : 'Compétences maîtrisées'}
+                </h3>
+                <ul className="service-bullet-list">
+                  {artisan.skillsList.map((sk, idx) => (
+                    <li key={idx}>{sk}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="lightbox-specs">
               <div className="spec-row">
                 <span className="spec-key">
-                  {lang === 'ar' ? 'الولاية' : 'Wilaya'}
+                  {lang === 'ar' ? 'التخصص' : 'Spécialité'}
                 </span>
-                <span className="spec-val">{artisan.wilaya}</span>
+                <span className="spec-val">
+                  {getCategoryLabel(artisan.profession, lang)}
+                </span>
               </div>
               <div className="spec-row">
                 <span className="spec-key">
-                  {lang === 'ar' ? 'البلدية' : 'Commune'}
+                  {lang === 'ar' ? 'الولاية والبلدية' : 'Zone'}
                 </span>
-                <span className="spec-val">{artisan.commune}</span>
+                <span className="spec-val">
+                  {artisan.wilaya} - {artisan.commune}
+                </span>
               </div>
               <div className="spec-row">
                 <span className="spec-key">
@@ -285,7 +310,7 @@ export function ArtisanProfileModal({
               </div>
             </div>
 
-            {(!user || user.uid !== artisan.ownerId) && (
+            {!artisan.isCurated && (!user || user.uid !== artisan.ownerId) && (
               <button
                 type="button"
                 className="btn btn-primary btn-full"
@@ -294,8 +319,8 @@ export function ArtisanProfileModal({
                 <MessageSquare size={17} />
                 <span>
                   {lang === 'ar'
-                    ? 'تواصل مع المهني واطلب تسعيرة'
-                    : 'Contacter et demander un devis'}
+                    ? 'تواصل مع عضو الفريق'
+                    : 'Contacter ce membre'}
                 </span>
               </button>
             )}
@@ -305,8 +330,8 @@ export function ArtisanProfileModal({
                 <div className="lightbox-add-photo">
                   <label className="form-label" htmlFor="art-photo-cap">
                     {lang === 'ar'
-                      ? 'إضافة صورة عمل لملفي الشخصي'
-                      : 'Ajouter une photo à mon profil'}
+                      ? 'إضافة صورة عمل لملف العضو'
+                      : 'Ajouter une photo au profil'}
                   </label>
                   <div className="extra-photo-controls">
                     <input

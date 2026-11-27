@@ -1,3 +1,6 @@
+@import "tailwindcss";
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 @font-face {
   font-family: 'DM Sans';
   src: url('/assets/fonts/DMSans-Regular.ttf') format('truetype');
@@ -73,58 +76,60 @@
   --glass-border: rgba(242, 241, 236, 0.16);
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-[hidden] {
-  display: none !important;
-}
+  [hidden] {
+    display: none !important;
+  }
 
-html {
-  font-family: var(--font-sans);
-  background-color: var(--bg);
-  color: var(--text-primary);
-  font-size: 16px;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  scroll-behavior: smooth;
-}
+  html {
+    font-family: var(--font-sans);
+    background-color: var(--bg);
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
 
-body {
-  background-color: var(--bg);
-  color: var(--text-primary);
-  overflow-x: hidden;
-  transition: background-color 240ms var(--ease-out), color 240ms var(--ease-out);
-}
+  body {
+    background-color: var(--bg);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    transition: background-color 240ms var(--ease-out), color 240ms var(--ease-out);
+  }
 
-img {
-  display: block;
-  max-width: 100%;
-}
+  img {
+    display: block;
+    max-width: 100%;
+  }
 
-button,
-a,
-input,
-select,
-textarea {
-  font-family: inherit;
-  color: inherit;
-  text-decoration: none;
-}
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+    color: inherit;
+    text-decoration: none;
+  }
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
 .tabular-nums {
@@ -2019,12 +2024,321 @@ textarea:focus-visible {
   gap: 14px;
 }
 
+/* Spotlight Hover Surface (Aceternity / Magic UI inspired) */
+.spotlight-surface {
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--spot-opacity, 0);
+  transition: opacity 240ms var(--ease-out);
+  background: radial-gradient(
+    260px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    rgba(47, 74, 59, 0.12),
+    transparent 72%
+  );
+}
+
+:root[data-theme='dark'] .spotlight-surface::before {
+  background: radial-gradient(
+    260px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    rgba(91, 135, 109, 0.18),
+    transparent 72%
+  );
+}
+
+/* Skills & Expertise Section */
+.skills-section,
+.services-guide-section {
+  padding-block: clamp(64px, 8vw, 108px);
+  border-bottom: 1px solid var(--border);
+}
+
+.skills-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.skill-card {
+  height: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+
+.skill-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.skill-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--accent);
+}
+
+.skill-level-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.skill-card-title {
+  font-size: 16.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.skill-card-desc {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.skill-tools-line {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+/* Detailed Services Guide Section */
+.services-guide-shell {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 24px;
+  margin-top: 32px;
+  align-items: start;
+}
+
+.services-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.services-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out);
+}
+
+.services-nav-btn:hover {
+  border-color: var(--border-strong);
+}
+
+.services-nav-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.services-nav-title {
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.services-nav-sub {
+  font-size: 12px;
+  opacity: 0.78;
+  margin-top: 2px;
+}
+
+.service-detail-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: clamp(20px, 3vw, 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.service-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.service-detail-title {
+  font-size: clamp(1.35rem, 2.2vw, 1.85rem);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.service-duration-note {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.service-quad-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.service-quad-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.service-quad-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.service-quad-text {
+  font-size: 14.5px;
+  color: var(--text-primary);
+  line-height: 1.7;
+}
+
+.service-bullet-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.service-bullet-list li {
+  position: relative;
+  padding-inline-start: 16px;
+}
+
+.service-bullet-list li::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.service-detail-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* Craftsman Skills & Before/After Helpers */
+.artisan-skills-line {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  line-height: 1.55;
+}
+
+.completed-services-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.project-before-after-note {
+  position: absolute;
+  bottom: 10px;
+  inset-inline-start: 10px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(16, 19, 17, 0.78);
+  color: #f7f6f2;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 5-Tab Portal & Admin Sub-navigation */
+.portal-tabs.has-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.admin-subnav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+/* Offline Toast Indicator */
+.offline-toast {
+  position: fixed;
+  bottom: 20px;
+  inset-inline-end: 20px;
+  z-index: 95;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--text-primary);
+  color: var(--bg);
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
+}
+
 /* Responsive */
 @media (max-width: 1120px) {
   .search-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .categories-grid {
+  .categories-grid,
+  .skills-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .services-guide-shell {
+    grid-template-columns: 1fr;
+  }
+  .services-nav-list {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .projects-grid,
@@ -2044,7 +2358,10 @@ textarea:focus-visible {
   .hero-grid,
   .thermal-grid,
   .search-grid,
-  .categories-grid {
+  .categories-grid,
+  .skills-grid,
+  .service-quad-grid,
+  .services-nav-list {
     grid-template-columns: 1fr;
   }
   .hero-kpi-strip {
@@ -2069,6 +2386,9 @@ textarea:focus-visible {
   .showcase-hud {
     flex-direction: column;
     align-items: flex-start;
+  }
+  .portal-tabs.has-5 {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 

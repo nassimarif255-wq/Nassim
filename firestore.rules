@@ -38,6 +38,7 @@ service cloud.firestore {
       return cat in [
         'construction_renovation',
         'ceramics',
+        'welding',
         'electricity',
         'plumbing',
         'carpentry',
@@ -63,6 +64,12 @@ service cloud.firestore {
       return uri is string && (uri.size() == 0 || isValidImageUri(uri));
     }
 
+    function isValidTagList(arr) {
+      return arr is list &&
+        arr.size() <= 12 &&
+        (arr.size() == 0 || (arr[0] is string && arr[0].size() >= 1 && arr[0].size() <= 80));
+    }
+
     // Validation Blueprint: Project
     function isValidProject(data) {
       return data.keys().hasAll([
@@ -72,8 +79,9 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'title', 'category', 'location', 'areaSqm',
-          'description', 'coverImage', 'ownerId', 'ownerName',
-          'createdAt', 'updatedAt'
+          'description', 'coverImage', 'beforeImage',
+          'completedServices', 'artisanId',
+          'ownerId', 'ownerName', 'createdAt', 'updatedAt'
         ]) &&
         data.title is string && data.title.size() >= 3 && data.title.size() <= 120 &&
         isValidProjectCategory(data.category) &&
@@ -81,6 +89,9 @@ service cloud.firestore {
         data.areaSqm is string && data.areaSqm.size() >= 1 && data.areaSqm.size() <= 30 &&
         data.description is string && data.description.size() >= 5 && data.description.size() <= 1500 &&
         isValidImageUri(data.coverImage) &&
+        (!('beforeImage' in data) || isOptionalImageUri(data.beforeImage)) &&
+        (!('completedServices' in data) || isValidTagList(data.completedServices)) &&
+        (!('artisanId' in data) || (data.artisanId is string && (data.artisanId.size() == 0 || isValidId(data.artisanId)))) &&
         data.ownerId is string && isValidId(data.ownerId) &&
         data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100 &&
         data.createdAt is timestamp &&
@@ -97,7 +108,7 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
-    // Validation Blueprint: ArtisanProfile (No PII)
+    // Validation Blueprint: ArtisanProfile (Official Team Member)
     function isValidArtisan(data) {
       return data.keys().hasAll([
           'displayName', 'profession', 'experienceYears',
@@ -105,17 +116,76 @@ service cloud.firestore {
           'ownerId', 'createdAt', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
-          'displayName', 'profession', 'experienceYears',
-          'wilaya', 'commune', 'bio', 'avatarUrl',
+          'displayName', 'roleTitle', 'profession', 'experienceYears',
+          'wilaya', 'commune', 'bio', 'skillsList', 'avatarUrl',
           'ownerId', 'createdAt', 'updatedAt'
         ]) &&
         data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100 &&
+        (!('roleTitle' in data) || (data.roleTitle is string && data.roleTitle.size() <= 100)) &&
         isValidServiceCategory(data.profession) &&
         data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 80 &&
         data.wilaya is string && data.wilaya.size() >= 2 && data.wilaya.size() <= 60 &&
         data.commune is string && data.commune.size() >= 2 && data.commune.size() <= 60 &&
         data.bio is string && data.bio.size() >= 10 && data.bio.size() <= 1200 &&
+        (!('skillsList' in data) || isValidTagList(data.skillsList)) &&
         isOptionalImageUri(data.avatarUrl) &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: TeamSkill (Admin Managed)
+    function isValidTeamSkill(data) {
+      return data.keys().hasAll([
+          'nameAr', 'nameFr', 'category', 'level',
+          'summaryAr', 'summaryFr', 'toolsAr', 'sortOrder',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'nameAr', 'nameFr', 'category', 'level',
+          'summaryAr', 'summaryFr', 'toolsAr', 'sortOrder',
+          'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.nameAr is string && data.nameAr.size() >= 2 && data.nameAr.size() <= 100 &&
+        data.nameFr is string && data.nameFr.size() >= 2 && data.nameFr.size() <= 100 &&
+        isValidServiceCategory(data.category) &&
+        data.level in ['expert', 'advanced', 'certified'] &&
+        data.summaryAr is string && data.summaryAr.size() >= 5 && data.summaryAr.size() <= 350 &&
+        data.summaryFr is string && data.summaryFr.size() >= 5 && data.summaryFr.size() <= 350 &&
+        data.toolsAr is string && data.toolsAr.size() <= 180 &&
+        data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 999 &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: TeamServiceGuide (Admin Managed)
+    function isValidTeamService(data) {
+      return data.keys().hasAll([
+          'titleAr', 'titleFr', 'category',
+          'natureAr', 'natureFr', 'deliverablesAr', 'deliverablesFr',
+          'stagesAr', 'stagesFr', 'outcomeAr', 'outcomeFr',
+          'durationLabel', 'sortOrder', 'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'titleAr', 'titleFr', 'category',
+          'natureAr', 'natureFr', 'deliverablesAr', 'deliverablesFr',
+          'stagesAr', 'stagesFr', 'outcomeAr', 'outcomeFr',
+          'durationLabel', 'sortOrder', 'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.titleAr is string && data.titleAr.size() >= 3 && data.titleAr.size() <= 120 &&
+        data.titleFr is string && data.titleFr.size() >= 3 && data.titleFr.size() <= 120 &&
+        isValidServiceCategory(data.category) &&
+        data.natureAr is string && data.natureAr.size() >= 5 && data.natureAr.size() <= 600 &&
+        data.natureFr is string && data.natureFr.size() >= 5 && data.natureFr.size() <= 600 &&
+        data.deliverablesAr is string && data.deliverablesAr.size() >= 5 && data.deliverablesAr.size() <= 900 &&
+        data.deliverablesFr is string && data.deliverablesFr.size() >= 5 && data.deliverablesFr.size() <= 900 &&
+        data.stagesAr is string && data.stagesAr.size() >= 5 && data.stagesAr.size() <= 900 &&
+        data.stagesFr is string && data.stagesFr.size() >= 5 && data.stagesFr.size() <= 900 &&
+        data.outcomeAr is string && data.outcomeAr.size() >= 5 && data.outcomeAr.size() <= 500 &&
+        data.outcomeFr is string && data.outcomeFr.size() >= 5 && data.outcomeFr.size() <= 500 &&
+        data.durationLabel is string && data.durationLabel.size() >= 1 && data.durationLabel.size() <= 60 &&
+        data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 999 &&
         data.ownerId is string && isValidId(data.ownerId) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
@@ -187,6 +257,60 @@ service cloud.firestore {
       allow list, write: if false;
     }
 
+    // 0A. Official Team Skills & Expertise (Public Read, Admin Write)
+    match /skills/{skillId} {
+      allow get: if isValidId(skillId);
+      allow list: if true;
+
+      allow create: if isAdmin() &&
+        isValidId(skillId) &&
+        isValidTeamSkill(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isAdmin() &&
+        isValidId(skillId) &&
+        isValidTeamSkill(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'nameAr', 'nameFr', 'category', 'level',
+          'summaryAr', 'summaryFr', 'toolsAr', 'sortOrder', 'updatedAt'
+        ]);
+
+      allow delete: if isAdmin() && isValidId(skillId);
+    }
+
+    // 0B. Official Detailed Service Guides (Public Read, Admin Write)
+    match /services/{serviceId} {
+      allow get: if isValidId(serviceId);
+      allow list: if true;
+
+      allow create: if isAdmin() &&
+        isValidId(serviceId) &&
+        isValidTeamService(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isAdmin() &&
+        isValidId(serviceId) &&
+        isValidTeamService(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'titleAr', 'titleFr', 'category',
+          'natureAr', 'natureFr', 'deliverablesAr', 'deliverablesFr',
+          'stagesAr', 'stagesFr', 'outcomeAr', 'outcomeFr',
+          'durationLabel', 'sortOrder', 'updatedAt'
+        ]);
+
+      allow delete: if isAdmin() && isValidId(serviceId);
+    }
+
     // 1. Public Projects Showcase (No PII; intentionally public read)
     match /projects/{projectId} {
       allow get: if isValidId(projectId);
@@ -208,7 +332,8 @@ service cloud.firestore {
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
           'title', 'category', 'location', 'areaSqm',
-          'description', 'coverImage', 'updatedAt'
+          'description', 'coverImage', 'beforeImage',
+          'completedServices', 'artisanId', 'updatedAt'
         ]);
 
       allow delete: if isVerifiedUser() &&
@@ -243,7 +368,7 @@ service cloud.firestore {
       }
     }
 
-    // 2. Public Artisans / Tradespeople Directory (No PII; intentionally public read)
+    // 2. Team Craftsmen Directory (No PII; intentionally public read)
     match /artisans/{artisanId} {
       allow get: if isValidId(artisanId);
       allow list: if true;
@@ -263,8 +388,8 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
-          'displayName', 'profession', 'experienceYears',
-          'wilaya', 'commune', 'bio', 'avatarUrl', 'updatedAt'
+          'displayName', 'roleTitle', 'profession', 'experienceYears',
+          'wilaya', 'commune', 'bio', 'skillsList', 'avatarUrl', 'updatedAt'
         ]);
 
       allow delete: if isVerifiedUser() &&
@@ -299,7 +424,7 @@ service cloud.firestore {
       }
     }
 
-    // 3. Public Customer Service Requests Board (No PII; intentionally public read)
+    // 3. Customer Service Requests Board (No PII; intentionally public read)
     match /requests/{requestId} {
       allow get: if isValidId(requestId);
       allow list: if true;
@@ -362,7 +487,7 @@ service cloud.firestore {
       }
     }
 
-    // 4. Private Customer <-> Professional Inquiries (Strictly Isolated)
+    // 4. Private Client <-> Team Inquiries (Strictly Isolated)
     match /inquiries/{inquiryId} {
       allow get: if isValidId(inquiryId) &&
         isVerifiedUser() &&

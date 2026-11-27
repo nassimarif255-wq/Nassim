@@ -10,7 +10,7 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import { X, Trash2, Pencil, Upload } from 'lucide-react';
+import { X, Trash2, Pencil, Upload, MoveHorizontal } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
   ProjectPhotoItem,
@@ -40,6 +40,9 @@ export function ProjectLightbox({
 }: ProjectLightboxProps) {
   const [extraPhotos, setExtraPhotos] = useState<ProjectPhotoItem[]>([]);
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+  const [viewMode, setViewMode] = useState<'compare' | 'gallery'>('gallery');
+  const [compareSplit, setCompareSplit] = useState(50);
+  const [draggingSplit, setDraggingSplit] = useState(false);
   const [photoCaption, setPhotoCaption] = useState('');
   const [addingPhoto, setAddingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState('');
@@ -48,7 +51,9 @@ export function ProjectLightbox({
     setActivePhotoIdx(0);
     setPhotoError('');
     setPhotoCaption('');
-  }, [project?.id]);
+    setCompareSplit(50);
+    setViewMode(project?.beforeImage ? 'compare' : 'gallery');
+  }, [project?.id, project?.beforeImage]);
 
   useEffect(() => {
     if (!project || project.isCurated) {
@@ -103,6 +108,17 @@ export function ProjectLightbox({
 
   const allPhotos: { id?: string; imageUrl: string; caption: string }[] = [
     { imageUrl: project.coverImage, caption: project.title },
+    ...(project.beforeImage
+      ? [
+          {
+            imageUrl: project.beforeImage,
+            caption:
+              lang === 'ar'
+                ? 'صورة الموقع قبل بدء الأشغال'
+                : 'État avant travaux',
+          },
+        ]
+      : []),
     ...(project.isCurated
       ? project.extraPhotos || []
       : extraPhotos.map((p) => ({
@@ -135,6 +151,7 @@ export function ProjectLightbox({
         createdAt: serverTimestamp(),
       }).catch((err) => handleFirestoreError(err, OperationType.CREATE, path));
       setPhotoCaption('');
+      setViewMode('gallery');
       setActivePhotoIdx(allPhotos.length);
     } catch (err) {
       setPhotoError(
@@ -154,6 +171,14 @@ export function ProjectLightbox({
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
     }
+  };
+
+  const updateCompareFromPointer = (
+    e: React.PointerEvent<HTMLDivElement>
+  ) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+    setCompareSplit(Math.max(0, Math.min(100, pct)));
   };
 
   return (
@@ -190,49 +215,138 @@ export function ProjectLightbox({
 
         <div className="lightbox-body">
           <div className="lightbox-media-col">
-            <div className="lightbox-stage">
-              <img
-                src={activePhoto.imageUrl}
-                alt={activePhoto.caption || project.title}
-                className="lightbox-main-img"
-                referrerPolicy="no-referrer"
-              />
-              {activePhoto.id && canManage && (
+            {project.beforeImage && (
+              <div className="segmented-control" style={{ marginTop: 0 }} role="tablist">
                 <button
                   type="button"
-                  className="lightbox-delete-photo"
-                  title={lang === 'ar' ? 'حذف هذه الصورة' : 'Supprimer cette photo'}
-                  onClick={() => handleDeleteExtraPhoto(activePhoto.id!)}
+                  role="tab"
+                  aria-selected={viewMode === 'compare'}
+                  className={`seg-btn${viewMode === 'compare' ? ' is-active' : ''}`}
+                  onClick={() => setViewMode('compare')}
                 >
-                  <Trash2 size={15} />
-                  <span>{lang === 'ar' ? 'حذف الصورة' : 'Supprimer'}</span>
+                  {lang === 'ar' ? 'مقارنة قبل / بعد' : 'Comparatif Avant / Après'}
                 </button>
-              )}
-            </div>
-
-            {activePhoto.caption && (
-              <p className="lightbox-photo-caption">{activePhoto.caption}</p>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === 'gallery'}
+                  className={`seg-btn${viewMode === 'gallery' ? ' is-active' : ''}`}
+                  onClick={() => setViewMode('gallery')}
+                >
+                  {lang === 'ar'
+                    ? `جميع الصور (${allPhotos.length})`
+                    : `Galerie (${allPhotos.length})`}
+                </button>
+              </div>
             )}
 
-            {allPhotos.length > 1 && (
-              <div className="lightbox-thumbs">
-                {allPhotos.map((item, idx) => (
-                  <button
-                    key={`${item.imageUrl.slice(0, 40)}-${idx}`}
-                    type="button"
-                    className={`lightbox-thumb-btn${
-                      idx === safeIdx ? ' is-active' : ''
-                    }`}
-                    onClick={() => setActivePhotoIdx(idx)}
-                  >
-                    <img
-                      src={item.imageUrl}
-                      alt={item.caption || `${idx + 1}`}
-                      referrerPolicy="no-referrer"
-                    />
-                  </button>
-                ))}
+            {project.beforeImage && viewMode === 'compare' ? (
+              <div
+                className="comparison-wrap"
+                dir="ltr"
+                onPointerDown={(e) => {
+                  setDraggingSplit(true);
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  updateCompareFromPointer(e);
+                }}
+                onPointerMove={(e) => {
+                  if (draggingSplit) updateCompareFromPointer(e);
+                }}
+                onPointerUp={() => setDraggingSplit(false)}
+                onPointerCancel={() => setDraggingSplit(false)}
+              >
+                <div className="comparison-layer">
+                  <img
+                    src={project.coverImage}
+                    alt={lang === 'ar' ? 'بعد التسليم' : 'Après travaux'}
+                    className="comparison-img"
+                    referrerPolicy="no-referrer"
+                  />
+                  <span className="comp-corner-tag comp-corner-right">
+                    {lang === 'ar' ? 'بعد الأشغال' : 'Après'}
+                  </span>
+                </div>
+                <div
+                  className="comparison-layer comparison-cold"
+                  style={{
+                    clipPath: `inset(0 ${100 - compareSplit}% 0 0)`,
+                  }}
+                >
+                  <img
+                    src={project.beforeImage}
+                    alt={lang === 'ar' ? 'قبل الأشغال' : 'Avant travaux'}
+                    className="comparison-img"
+                    referrerPolicy="no-referrer"
+                  />
+                  <span className="comp-corner-tag comp-corner-left">
+                    {lang === 'ar' ? 'قبل الأشغال' : 'Avant'}
+                  </span>
+                </div>
+                <div
+                  className="comparison-handle"
+                  style={{
+                    left: `clamp(22px, ${compareSplit}%, calc(100% - 22px))`,
+                  }}
+                >
+                  <div className="handle-line" />
+                  <div className="handle-knob">
+                    <MoveHorizontal size={18} />
+                  </div>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="lightbox-stage">
+                  <img
+                    src={activePhoto.imageUrl}
+                    alt={activePhoto.caption || project.title}
+                    className="lightbox-main-img"
+                    referrerPolicy="no-referrer"
+                  />
+                  {activePhoto.id && canManage && (
+                    <button
+                      type="button"
+                      className="lightbox-delete-photo"
+                      title={
+                        lang === 'ar'
+                          ? 'حذف هذه الصورة'
+                          : 'Supprimer cette photo'
+                      }
+                      onClick={() => handleDeleteExtraPhoto(activePhoto.id!)}
+                    >
+                      <Trash2 size={15} />
+                      <span>{lang === 'ar' ? 'حذف الصورة' : 'Supprimer'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {activePhoto.caption && (
+                  <p className="lightbox-photo-caption">
+                    {activePhoto.caption}
+                  </p>
+                )}
+
+                {allPhotos.length > 1 && (
+                  <div className="lightbox-thumbs">
+                    {allPhotos.map((item, idx) => (
+                      <button
+                        key={`${item.imageUrl.slice(0, 40)}-${idx}`}
+                        type="button"
+                        className={`lightbox-thumb-btn${
+                          idx === safeIdx ? ' is-active' : ''
+                        }`}
+                        onClick={() => setActivePhotoIdx(idx)}
+                      >
+                        <img
+                          src={item.imageUrl}
+                          alt={item.caption || `${idx + 1}`}
+                          referrerPolicy="no-referrer"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -270,6 +384,22 @@ export function ProjectLightbox({
                 <span className="spec-val tabular-nums">{allPhotos.length}</span>
               </div>
             </div>
+
+            {project.completedServices &&
+              project.completedServices.length > 0 && (
+                <div className="completed-services-box">
+                  <h3 className="form-label">
+                    {lang === 'ar'
+                      ? 'الخدمات والأعمال المنجزة في المشروع'
+                      : 'Prestations réalisées sur ce chantier'}
+                  </h3>
+                  <ul className="service-bullet-list">
+                    {project.completedServices.map((srv, idx) => (
+                      <li key={idx}>{srv}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
             {canManage && (
               <div className="lightbox-manage-box">
@@ -342,8 +472,8 @@ export function ProjectLightbox({
             {project.isCurated && (
               <p className="curated-note">
                 {lang === 'ar'
-                  ? 'نموذج مرجعي من استوديو اخدم دارك dz darkom pro. سجّل الدخول لنشر أعمالك الحقيقية.'
-                  : 'Modèle de référence dz darkom pro. Connectez-vous pour publier vos chantiers réels.'}
+                  ? 'مشروع مرجعي من أرشيف فريق اخدم دارك dz darkom pro. يمكن لمدير الفريق إضافة وتعديل المشاريع الحقيقية وصور قبل/بعد من لوحة الإدارة.'
+                  : 'Projet de référence de l’équipe dz darkom pro. L’administrateur peut publier et modifier les chantiers réels avant/après depuis l’espace gestion.'}
               </p>
             )}
           </div>

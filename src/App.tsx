@@ -19,7 +19,10 @@ import {
 } from 'firebase/firestore';
 import {
   ArrowUpLeft,
+  ChevronLeft,
+  ChevronRight,
   Droplets,
+  Flame,
   Grid2x2,
   Hammer,
   MessageSquare,
@@ -28,6 +31,7 @@ import {
   PaintRoller,
   Plus,
   Search,
+  ShieldCheck,
   Sun,
   Wind,
   Wrench,
@@ -45,10 +49,16 @@ import { initSpecsCanvas } from './webgl/specsCanvas';
 import {
   ArtisanRecord,
   CURATED_PROJECTS,
+  CURATED_SERVICES,
+  CURATED_SKILLS,
+  CURATED_TEAM_MEMBERS,
   GENERATED_ASSETS,
   ProjectCategory,
   ProjectRecord,
   ServiceRequestRecord,
+  SkillLevelId,
+  TeamServiceGuideRecord,
+  TeamSkillRecord,
 } from './data/showcaseDefaults';
 import {
   AppLang,
@@ -66,6 +76,9 @@ import {
 import { ArtisanProfileModal } from './components/ArtisanProfileModal';
 import { RequestDetailModal } from './components/RequestDetailModal';
 import { ContactModal, ContactTarget } from './components/ContactModal';
+import { PWAInstallButton } from './components/PWAInstallButton';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { RevealBlock, SpotlightCard } from './components/ui/motion-primitives';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -74,6 +87,7 @@ const ADMIN_EMAIL = 'nassimarif255@gmail.com';
 const CATEGORY_ICONS: Record<ServiceCategoryId, typeof Hammer> = {
   construction_renovation: Hammer,
   ceramics: Grid2x2,
+  welding: Flame,
   electricity: Zap,
   plumbing: Droplets,
   carpentry: Wrench,
@@ -81,6 +95,35 @@ const CATEGORY_ICONS: Record<ServiceCategoryId, typeof Hammer> = {
   hvac: Wind,
   solar: Sun,
 };
+
+function readCachedList<T>(key: string): T[] {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedList<T>(key: string, items: T[]): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(items));
+  } catch {
+    // Ignore storage quota errors cleanly
+  }
+}
+
+function getSkillLevelLabel(level: SkillLevelId, lang: AppLang): string {
+  if (level === 'expert') {
+    return lang === 'ar' ? 'تخصص رئيسي' : 'Expertise métier';
+  }
+  if (level === 'certified') {
+    return lang === 'ar' ? 'معايير هندسية' : 'Normé & certifié';
+  }
+  return lang === 'ar' ? 'مستوى متقدم' : 'Maîtrise avancée';
+}
 
 function matchesCategoryFilter(
   itemCategory: string,
@@ -108,6 +151,7 @@ export default function App() {
   const [captionBlur, setCaptionBlur] = useState(false);
   const [splitPct, setSplitPct] = useState(50);
   const [splitAnimate, setSplitAnimate] = useState(false);
+  const [selectedServiceId, setSelectedServiceId] = useState<string>('');
 
   // Unified Search Filters (Profession + Wilaya + Commune + Keyword)
   const [filterProfession, setFilterProfession] = useState<
@@ -117,15 +161,28 @@ export default function App() {
   const [filterCommune, setFilterCommune] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Firestore Public Collections
+  // Firestore Public Collections (with offline localStorage cache fallback)
   const [firestoreProjects, setFirestoreProjects] = useState<ProjectRecord[]>(
-    []
+    () => readCachedList<ProjectRecord>('dzdarkom_cache_projects')
   );
   const [projectsLoading, setProjectsLoading] = useState(true);
-  const [artisans, setArtisans] = useState<ArtisanRecord[]>([]);
+
+  const [artisans, setArtisans] = useState<ArtisanRecord[]>(() =>
+    readCachedList<ArtisanRecord>('dzdarkom_cache_artisans')
+  );
   const [artisansLoading, setArtisansLoading] = useState(true);
-  const [requests, setRequests] = useState<ServiceRequestRecord[]>([]);
+
+  const [requests, setRequests] = useState<ServiceRequestRecord[]>(() =>
+    readCachedList<ServiceRequestRecord>('dzdarkom_cache_requests')
+  );
   const [requestsLoading, setRequestsLoading] = useState(true);
+
+  const [firestoreSkills, setFirestoreSkills] = useState<TeamSkillRecord[]>(
+    () => readCachedList<TeamSkillRecord>('dzdarkom_cache_skills')
+  );
+  const [firestoreServices, setFirestoreServices] = useState<
+    TeamServiceGuideRecord[]
+  >(() => readCachedList<TeamServiceGuideRecord>('dzdarkom_cache_services'));
 
   // Selected Detail Modals
   const [selectedProject, setSelectedProject] = useState<ProjectRecord | null>(
@@ -191,23 +248,28 @@ export default function App() {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        setFirestoreProjects(
-          snapshot.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              title: String(data.title || ''),
-              category: (data.category as ProjectCategory) || 'ceramics',
-              location: String(data.location || ''),
-              areaSqm: String(data.areaSqm || ''),
-              description: String(data.description || ''),
-              coverImage: String(data.coverImage || ''),
-              ownerId: String(data.ownerId || ''),
-              ownerName: String(data.ownerName || 'عضو اخدم دارك'),
-              isCurated: false,
-            };
-          })
-        );
+        const list: ProjectRecord[] = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            title: String(data.title || ''),
+            category: (data.category as ProjectCategory) || 'ceramics',
+            location: String(data.location || ''),
+            areaSqm: String(data.areaSqm || ''),
+            description: String(data.description || ''),
+            coverImage: String(data.coverImage || ''),
+            beforeImage: data.beforeImage ? String(data.beforeImage) : '',
+            completedServices: Array.isArray(data.completedServices)
+              ? data.completedServices.map(String)
+              : [],
+            artisanId: data.artisanId ? String(data.artisanId) : '',
+            ownerId: String(data.ownerId || ''),
+            ownerName: String(data.ownerName || 'فريق اخدم دارك'),
+            isCurated: false,
+          };
+        });
+        setFirestoreProjects(list);
+        writeCachedList('dzdarkom_cache_projects', list);
         setProjectsLoading(false);
       },
       (error) => {
@@ -218,7 +280,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 2. Live Firestore Artisans Directory
+  // 2. Live Firestore Team Profiles Feed
   useEffect(() => {
     const q = query(
       collection(db, 'artisans'),
@@ -227,23 +289,28 @@ export default function App() {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        setArtisans(
-          snapshot.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              displayName: String(data.displayName || ''),
-              profession:
-                (data.profession as ServiceCategoryId) || 'construction_renovation',
-              experienceYears: Number(data.experienceYears || 0),
-              wilaya: String(data.wilaya || ''),
-              commune: String(data.commune || ''),
-              bio: String(data.bio || ''),
-              avatarUrl: String(data.avatarUrl || ''),
-              ownerId: String(data.ownerId || ''),
-            };
-          })
-        );
+        const list: ArtisanRecord[] = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            displayName: String(data.displayName || ''),
+            roleTitle: data.roleTitle ? String(data.roleTitle) : '',
+            profession:
+              (data.profession as ServiceCategoryId) || 'construction_renovation',
+            experienceYears: Number(data.experienceYears || 0),
+            wilaya: String(data.wilaya || ''),
+            commune: String(data.commune || ''),
+            bio: String(data.bio || ''),
+            skillsList: Array.isArray(data.skillsList)
+              ? data.skillsList.map(String)
+              : [],
+            avatarUrl: String(data.avatarUrl || ''),
+            ownerId: String(data.ownerId || ''),
+            isCurated: false,
+          };
+        });
+        setArtisans(list);
+        writeCachedList('dzdarkom_cache_artisans', list);
         setArtisansLoading(false);
       },
       (error) => {
@@ -263,30 +330,101 @@ export default function App() {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        setRequests(
-          snapshot.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              title: String(data.title || ''),
-              category:
-                (data.category as ServiceCategoryId) || 'construction_renovation',
-              wilaya: String(data.wilaya || ''),
-              commune: String(data.commune || ''),
-              description: String(data.description || ''),
-              coverImage: String(data.coverImage || ''),
-              status:
-                (data.status as 'open' | 'in_progress' | 'closed') || 'open',
-              ownerId: String(data.ownerId || ''),
-              ownerName: String(data.ownerName || 'زبون'),
-            };
-          })
-        );
+        const list: ServiceRequestRecord[] = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            title: String(data.title || ''),
+            category:
+              (data.category as ServiceCategoryId) || 'construction_renovation',
+            wilaya: String(data.wilaya || ''),
+            commune: String(data.commune || ''),
+            description: String(data.description || ''),
+            coverImage: String(data.coverImage || ''),
+            status:
+              (data.status as 'open' | 'in_progress' | 'closed') || 'open',
+            ownerId: String(data.ownerId || ''),
+            ownerName: String(data.ownerName || 'زبون'),
+          };
+        });
+        setRequests(list);
+        writeCachedList('dzdarkom_cache_requests', list);
         setRequestsLoading(false);
       },
       (error) => {
         setRequestsLoading(false);
         handleFirestoreError(error, OperationType.LIST, 'requests');
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // 4. Live Firestore Team Skills Feed
+  useEffect(() => {
+    const q = query(collection(db, 'skills'), orderBy('sortOrder', 'asc'));
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: TeamSkillRecord[] = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            nameAr: String(data.nameAr || ''),
+            nameFr: String(data.nameFr || data.nameAr || ''),
+            category: (data.category as ServiceCategoryId) || 'ceramics',
+            level: (data.level as SkillLevelId) || 'expert',
+            summaryAr: String(data.summaryAr || ''),
+            summaryFr: String(data.summaryFr || data.summaryAr || ''),
+            toolsAr: String(data.toolsAr || ''),
+            sortOrder: Number(data.sortOrder || 0),
+            ownerId: String(data.ownerId || ''),
+            isCurated: false,
+          };
+        });
+        setFirestoreSkills(list);
+        writeCachedList('dzdarkom_cache_skills', list);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'skills');
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // 5. Live Firestore Detailed Services Guide Feed
+  useEffect(() => {
+    const q = query(collection(db, 'services'), orderBy('sortOrder', 'asc'));
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: TeamServiceGuideRecord[] = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            titleAr: String(data.titleAr || ''),
+            titleFr: String(data.titleFr || data.titleAr || ''),
+            category: (data.category as ServiceCategoryId) || 'ceramics',
+            natureAr: String(data.natureAr || ''),
+            natureFr: String(data.natureFr || data.natureAr || ''),
+            deliverablesAr: String(data.deliverablesAr || ''),
+            deliverablesFr: String(
+              data.deliverablesFr || data.deliverablesAr || ''
+            ),
+            stagesAr: String(data.stagesAr || ''),
+            stagesFr: String(data.stagesFr || data.stagesAr || ''),
+            outcomeAr: String(data.outcomeAr || ''),
+            outcomeFr: String(data.outcomeFr || data.outcomeAr || ''),
+            durationLabel: String(data.durationLabel || ''),
+            sortOrder: Number(data.sortOrder || 0),
+            ownerId: String(data.ownerId || ''),
+            isCurated: false,
+          };
+        });
+        setFirestoreServices(list);
+        writeCachedList('dzdarkom_cache_services', list);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'services');
       }
     );
     return () => unsub();
@@ -399,21 +537,65 @@ export default function App() {
   const isAdmin =
     !!user && user.emailVerified && user.email === ADMIN_EMAIL;
 
+  const displayedSkills = useMemo(
+    () => (firestoreSkills.length > 0 ? firestoreSkills : CURATED_SKILLS),
+    [firestoreSkills]
+  );
+
+  const displayedServices = useMemo(
+    () =>
+      firestoreServices.length > 0 ? firestoreServices : CURATED_SERVICES,
+    [firestoreServices]
+  );
+
+  const displayedArtisans = useMemo(
+    () => (artisans.length > 0 ? artisans : CURATED_TEAM_MEMBERS),
+    [artisans]
+  );
+
   const allProjects = useMemo(
     () => [...firestoreProjects, ...CURATED_PROJECTS],
     [firestoreProjects]
   );
 
-  // Unified Search Filters across Artisans, Requests, and Projects
   const activeWilayaObj = useMemo(
     () => ALGERIA_WILAYAS.find((w) => w.ar === filterWilaya),
     [filterWilaya]
   );
 
+  const filteredSkills = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return displayedSkills.filter((sk) => {
+      if (filterProfession !== 'all' && sk.category !== filterProfession)
+        return false;
+      if (!q) return true;
+      return (
+        sk.nameAr.toLowerCase().includes(q) ||
+        sk.nameFr.toLowerCase().includes(q) ||
+        sk.summaryAr.toLowerCase().includes(q) ||
+        sk.summaryFr.toLowerCase().includes(q) ||
+        sk.toolsAr.toLowerCase().includes(q)
+      );
+    });
+  }, [displayedSkills, filterProfession, searchQuery]);
+
+  const activeServiceGuide = useMemo(() => {
+    if (displayedServices.length === 0) return null;
+    const byId = displayedServices.find((s) => s.id === selectedServiceId);
+    if (byId) return byId;
+    if (filterProfession !== 'all') {
+      const byCat = displayedServices.find(
+        (s) => s.category === filterProfession
+      );
+      if (byCat) return byCat;
+    }
+    return displayedServices[0];
+  }, [displayedServices, selectedServiceId, filterProfession]);
+
   const filteredArtisans = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const com = filterCommune.trim().toLowerCase();
-    return artisans.filter((art) => {
+    return displayedArtisans.filter((art) => {
       if (filterProfession !== 'all' && art.profession !== filterProfession)
         return false;
       if (
@@ -426,13 +608,15 @@ export default function App() {
       if (!q) return true;
       return (
         art.displayName.toLowerCase().includes(q) ||
+        (art.roleTitle || '').toLowerCase().includes(q) ||
         art.bio.toLowerCase().includes(q) ||
         art.wilaya.toLowerCase().includes(q) ||
-        art.commune.toLowerCase().includes(q)
+        art.commune.toLowerCase().includes(q) ||
+        (art.skillsList || []).some((s) => s.toLowerCase().includes(q))
       );
     });
   }, [
-    artisans,
+    displayedArtisans,
     filterProfession,
     filterWilaya,
     activeWilayaObj,
@@ -487,7 +671,8 @@ export default function App() {
       return (
         p.title.toLowerCase().includes(q) ||
         p.location.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q)
+        p.description.toLowerCase().includes(q) ||
+        (p.completedServices || []).some((s) => s.toLowerCase().includes(q))
       );
     });
   }, [
@@ -524,14 +709,14 @@ export default function App() {
         alt: 'Travertine porcelain salon renovation',
       },
       {
-        id: 'calacatta',
-        label: lang === 'ar' ? 'ألواح كالاكاتا' : 'Dalles Calacatta',
+        id: 'welding',
+        label: lang === 'ar' ? 'لحام وحدادة' : 'Soudure & Acier',
         title:
           lang === 'ar'
-            ? 'مطبخ حديث بألواح الكالاكاتا'
-            : 'Cuisine moderne en dalles Calacatta',
-        src: GENERATED_ASSETS.kitchenMarble,
-        alt: 'Calacatta ceramic kitchen',
+            ? 'سلالم وهياكل معدنية مصممة في الورشة'
+            : 'Escaliers et ferronnerie d’atelier',
+        src: GENERATED_ASSETS.weldingCraft,
+        alt: 'Architectural metalwork and TIG welding craft',
       },
       {
         id: 'facade',
@@ -660,7 +845,7 @@ export default function App() {
   };
 
   const handleDeleteArtisan = async (artisan: ArtisanRecord) => {
-    if (!user) return;
+    if (artisan.isCurated || !user) return;
     const artPath = `artisans/${artisan.id}`;
     const photosSnap = await getDocs(
       collection(db, 'artisans', artisan.id, 'photos')
@@ -708,6 +893,30 @@ export default function App() {
 
   const activeSpot = heroSpotlights[heroSpotIdx];
 
+  const activeServiceDeliverables = useMemo(() => {
+    if (!activeServiceGuide) return [];
+    const raw =
+      lang === 'ar'
+        ? activeServiceGuide.deliverablesAr
+        : activeServiceGuide.deliverablesFr;
+    return raw
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }, [activeServiceGuide, lang]);
+
+  const activeServiceStages = useMemo(() => {
+    if (!activeServiceGuide) return [];
+    const raw =
+      lang === 'ar'
+        ? activeServiceGuide.stagesAr
+        : activeServiceGuide.stagesFr;
+    return raw
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }, [activeServiceGuide, lang]);
+
   return (
     <>
       <header className="site-header" id="site-header">
@@ -732,26 +941,29 @@ export default function App() {
           </a>
 
           <nav className="header-nav" aria-label="Primary">
-            <a href="#categories" className="nav-link">
-              {t.navCategories}
+            <a href="#skills" className="nav-link">
+              {t.navSkills}
+            </a>
+            <a href="#services-guide" className="nav-link">
+              {t.navServices}
             </a>
             <a href="#artisans" className="nav-link">
               {t.navPros}
             </a>
-            <a href="#requests" className="nav-link">
-              {t.navRequests}
-            </a>
             <a href="#gallery" className="nav-link">
               {t.navGallery}
+            </a>
+            <a href="#requests" className="nav-link">
+              {t.navRequests}
             </a>
           </nav>
 
           <button
             type="button"
             className="btn btn-primary btn-sm header-action"
-            onClick={() => openPortal('project')}
+            onClick={() => openPortal(isAdmin ? 'admin' : 'request')}
           >
-            <Plus size={16} />
+            {isAdmin ? <ShieldCheck size={16} /> : <Plus size={16} />}
             <span>{user ? t.headerCtaSignedIn : t.headerCtaGuest}</span>
           </button>
         </div>
@@ -808,6 +1020,7 @@ export default function App() {
                     <span>{t.heroPostRequest}</span>
                     <ArrowUpLeft size={16} />
                   </button>
+                  <PWAInstallButton lang={lang} variant="hero" />
                 </div>
               </div>
 
@@ -844,14 +1057,16 @@ export default function App() {
 
             <div className="hero-kpi-strip">
               <div className="kpi-cell">
-                <span className="kpi-num tabular-nums">{artisans.length}</span>
+                <span className="kpi-num tabular-nums">
+                  {displayedArtisans.length}
+                </span>
                 <span className="kpi-label">{t.kpiPros}</span>
               </div>
               <div className="kpi-cell">
                 <span className="kpi-num tabular-nums">
-                  {requests.filter((r) => r.status !== 'closed').length}
+                  {displayedSkills.length}
                 </span>
-                <span className="kpi-label">{t.kpiRequests}</span>
+                <span className="kpi-label">{t.kpiSkills}</span>
               </div>
               <div className="kpi-cell">
                 <span className="kpi-num tabular-nums">
@@ -954,7 +1169,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* SECTION 3: 8 Service Categories */}
+        {/* SECTION 3: Team Specialties (9 Disciplines including Ceramics, Construction, Welding, Electricity, Plumbing) */}
         <section id="categories" className="categories-section">
           <div className="container">
             <h2 className="section-title">{t.categoriesTitle}</h2>
@@ -964,8 +1179,8 @@ export default function App() {
               {SERVICE_CATEGORIES.map((cat) => {
                 const Icon = CATEGORY_ICONS[cat.id];
                 const isActive = filterProfession === cat.id;
-                const proCount = artisans.filter(
-                  (a) => a.profession === cat.id
+                const skillCount = displayedSkills.filter(
+                  (sk) => sk.category === cat.id
                 ).length;
 
                 return (
@@ -974,16 +1189,23 @@ export default function App() {
                     type="button"
                     className={`category-card${isActive ? ' is-active' : ''}`}
                     onClick={() => {
-                      setFilterProfession(isActive ? 'all' : cat.id);
+                      const nextFilter = isActive ? 'all' : cat.id;
+                      setFilterProfession(nextFilter);
+                      const matchingService = displayedServices.find(
+                        (s) => s.category === cat.id
+                      );
+                      if (matchingService) {
+                        setSelectedServiceId(matchingService.id);
+                      }
                       document
-                        .getElementById('artisans')
+                        .getElementById('services-guide')
                         ?.scrollIntoView({ behavior: 'smooth' });
                     }}
                   >
                     <div className="category-card-head">
                       <Icon size={22} />
                       <span className="project-meta-line tabular-nums">
-                        {proCount}
+                        {skillCount}
                       </span>
                     </div>
                     <h3 className="category-card-title">
@@ -999,7 +1221,208 @@ export default function App() {
           </div>
         </section>
 
-        {/* SECTION 4: Professionals Directory */}
+        {/* SECTION 4: Team Skills & Expertise (Admin Managed) */}
+        <section id="skills" className="skills-section">
+          <div className="container">
+            <div className="gallery-header">
+              <div>
+                <h2 className="section-title">{t.skillsTitle}</h2>
+                <p className="section-sub">{t.skillsSub}</p>
+              </div>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => openPortal('admin')}
+                >
+                  <ShieldCheck size={17} />
+                  <span>{t.skillsManageBtn}</span>
+                </button>
+              )}
+            </div>
+
+            {filteredSkills.length === 0 ? (
+              <div className="gallery-empty">
+                <p>{t.galleryEmpty}</p>
+              </div>
+            ) : (
+              <div className="skills-grid">
+                {filteredSkills.map((sk, idx) => {
+                  const Icon = CATEGORY_ICONS[sk.category] || Hammer;
+                  return (
+                    <RevealBlock key={sk.id} delay={(idx % 4) * 0.04}>
+                      <SpotlightCard className="skill-card">
+                        <div className="skill-card-head">
+                          <Icon size={20} />
+                          <span className="skill-level-label">
+                            {getSkillLevelLabel(sk.level, lang)}
+                          </span>
+                        </div>
+                        <span className="project-meta-line">
+                          {getCategoryLabel(sk.category, lang)}
+                        </span>
+                        <h3 className="skill-card-title">
+                          {lang === 'ar' ? sk.nameAr : sk.nameFr}
+                        </h3>
+                        <p className="skill-card-desc">
+                          {lang === 'ar' ? sk.summaryAr : sk.summaryFr}
+                        </p>
+                        {sk.toolsAr && (
+                          <p className="skill-tools-line">{sk.toolsAr}</p>
+                        )}
+                      </SpotlightCard>
+                    </RevealBlock>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* SECTION 5: Detailed Service Explanations (Nature, Deliverables, Stages, Outcome) */}
+        <section id="services-guide" className="services-guide-section">
+          <div className="container">
+            <div className="gallery-header">
+              <div>
+                <h2 className="section-title">{t.servicesGuideTitle}</h2>
+                <p className="section-sub">{t.servicesGuideSub}</p>
+              </div>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => openPortal('admin')}
+                >
+                  <ShieldCheck size={16} />
+                  <span>
+                    {lang === 'ar' ? 'تعديل الشروحات' : 'Gérer les fiches'}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {activeServiceGuide && (
+              <div className="services-guide-shell">
+                <div className="services-nav-list" role="tablist">
+                  {displayedServices.map((srv) => {
+                    const isSelected = srv.id === activeServiceGuide.id;
+                    return (
+                      <button
+                        key={srv.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isSelected}
+                        className={`services-nav-btn${
+                          isSelected ? ' is-active' : ''
+                        }`}
+                        onClick={() => setSelectedServiceId(srv.id)}
+                      >
+                        <div>
+                          <div className="services-nav-title">
+                            {lang === 'ar' ? srv.titleAr : srv.titleFr}
+                          </div>
+                          <div className="services-nav-sub">
+                            {getCategoryLabel(srv.category, lang)}
+                          </div>
+                        </div>
+                        {lang === 'ar' ? (
+                          <ChevronLeft size={16} />
+                        ) : (
+                          <ChevronRight size={16} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <RevealBlock
+                  key={activeServiceGuide.id}
+                  className="service-detail-panel"
+                >
+                  <div className="service-detail-head">
+                    <div>
+                      <span className="project-meta-line">
+                        {getCategoryLabel(activeServiceGuide.category, lang)}
+                      </span>
+                      <h3 className="service-detail-title">
+                        {lang === 'ar'
+                          ? activeServiceGuide.titleAr
+                          : activeServiceGuide.titleFr}
+                      </h3>
+                    </div>
+                    <span className="service-duration-note">
+                      {t.servicesDurationLbl} {activeServiceGuide.durationLabel}
+                    </span>
+                  </div>
+
+                  <div className="service-quad-grid">
+                    <div className="service-quad-card">
+                      <span className="service-quad-label">
+                        {t.servicesNatureLbl}
+                      </span>
+                      <p className="service-quad-text">
+                        {lang === 'ar'
+                          ? activeServiceGuide.natureAr
+                          : activeServiceGuide.natureFr}
+                      </p>
+                    </div>
+
+                    <div className="service-quad-card">
+                      <span className="service-quad-label">
+                        {t.servicesOutcomeLbl}
+                      </span>
+                      <p className="service-quad-text">
+                        {lang === 'ar'
+                          ? activeServiceGuide.outcomeAr
+                          : activeServiceGuide.outcomeFr}
+                      </p>
+                    </div>
+
+                    <div className="service-quad-card">
+                      <span className="service-quad-label">
+                        {t.servicesDeliverablesLbl}
+                      </span>
+                      <ul className="service-bullet-list">
+                        {activeServiceDeliverables.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="service-quad-card">
+                      <span className="service-quad-label">
+                        {t.servicesStagesLbl}
+                      </span>
+                      <ul className="service-bullet-list">
+                        {activeServiceStages.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="service-detail-foot">
+                    <span className="project-meta-line">
+                      {lang === 'ar'
+                        ? 'تنفيذ مباشر بإشراف فريق DZ Darkom Pro'
+                        : 'Exécution directe par l’équipe DZ Darkom Pro'}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => openPortal('request')}
+                    >
+                      <span>{t.servicesRequestCta}</span>
+                      <ArrowUpLeft size={15} />
+                    </button>
+                  </div>
+                </RevealBlock>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* SECTION 6: Official Team Craftsman Profiles */}
         <section id="artisans" className="artisans-section">
           <div className="container">
             <div className="gallery-header">
@@ -1007,17 +1430,19 @@ export default function App() {
                 <h2 className="section-title">{t.prosTitle}</h2>
                 <p className="section-sub">{t.prosSub}</p>
               </div>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => openPortal('artisan')}
-              >
-                <Plus size={17} />
-                <span>{t.prosRegisterBtn}</span>
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => openPortal('artisan')}
+                >
+                  <Plus size={17} />
+                  <span>{t.prosRegisterBtn}</span>
+                </button>
+              )}
             </div>
 
-            {artisansLoading ? (
+            {artisansLoading && artisans.length === 0 && displayedArtisans.length === 0 ? (
               <div className="gallery-empty">
                 <p>...</p>
               </div>
@@ -1027,91 +1452,120 @@ export default function App() {
                   <strong>{t.prosEmpty}</strong>
                 </p>
                 <p style={{ marginTop: 8 }}>{t.prosEmptyHint}</p>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  style={{ marginTop: 16 }}
-                  onClick={() => openPortal('artisan')}
-                >
-                  <Plus size={15} />
-                  <span>{t.prosRegisterBtn}</span>
-                </button>
               </div>
             ) : (
               <div className="artisans-grid">
-                {filteredArtisans.map((art) => (
-                  <article key={art.id} className="artisan-card">
-                    <div className="artisan-card-head">
-                      {art.avatarUrl ? (
-                        <img
-                          src={art.avatarUrl}
-                          alt={art.displayName}
-                          className="artisan-avatar"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div className="artisan-avatar">
-                          {art.displayName.charAt(0)}
+                {filteredArtisans.map((art, idx) => {
+                  const memberProjectsCount = allProjects.filter(
+                    (p) =>
+                      p.artisanId === art.id ||
+                      (p.ownerId !== 'curated' && p.ownerId === art.ownerId)
+                  ).length;
+
+                  return (
+                    <RevealBlock key={art.id} delay={(idx % 3) * 0.05}>
+                      <SpotlightCard className="artisan-card">
+                        <div className="artisan-card-head">
+                          {art.avatarUrl ? (
+                            <img
+                              src={art.avatarUrl}
+                              alt={art.displayName}
+                              className="artisan-avatar"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="artisan-avatar">
+                              {art.displayName.charAt(0)}
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="artisan-name">{art.displayName}</h3>
+                            <div className="project-meta-line">
+                              <span>
+                                {art.roleTitle ||
+                                  getCategoryLabel(art.profession, lang)}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span className="tabular-nums">
+                                {art.experienceYears} {t.prosYearsExp}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      )}
-                      <div>
-                        <h3 className="artisan-name">{art.displayName}</h3>
+
                         <div className="project-meta-line">
                           <span>{getCategoryLabel(art.profession, lang)}</span>
                           <span aria-hidden="true">·</span>
-                          <span className="tabular-nums">
-                            {art.experienceYears} {t.prosYearsExp}
+                          <span>
+                            {art.wilaya} - {art.commune}
                           </span>
+                          {memberProjectsCount > 0 && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="tabular-nums">
+                                {memberProjectsCount}{' '}
+                                {lang === 'ar' ? 'أعمال' : 'projets'}
+                              </span>
+                            </>
+                          )}
                         </div>
-                      </div>
-                    </div>
 
-                    <div className="project-meta-line">
-                      <span>{art.wilaya}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{art.commune}</span>
-                    </div>
+                        {art.skillsList && art.skillsList.length > 0 && (
+                          <p className="artisan-skills-line">
+                            {art.skillsList.join(' · ')}
+                          </p>
+                        )}
 
-                    <p className="project-card-desc">{art.bio}</p>
+                        <p className="project-card-desc">{art.bio}</p>
 
-                    <div className="artisan-card-actions">
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => setSelectedArtisan(art)}
-                      >
-                        {t.prosViewProfile}
-                      </button>
-                      {(!user || user.uid !== art.ownerId) && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          onClick={() =>
-                            setContactTarget({
-                              recipientOwnerId: art.ownerId,
-                              recipientName: art.displayName,
-                              contextType: 'artisan',
-                              contextId: art.id,
-                              contextTitle: `${getCategoryLabel(
-                                art.profession,
-                                lang
-                              )} · ${art.wilaya}`,
-                            })
-                          }
-                        >
-                          <MessageSquare size={14} />
-                          <span>{t.prosContactBtn}</span>
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                ))}
+                        <div className="artisan-card-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setSelectedArtisan(art)}
+                          >
+                            {t.prosViewProfile}
+                          </button>
+                          {!art.isCurated && (!user || user.uid !== art.ownerId) ? (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() =>
+                                setContactTarget({
+                                  recipientOwnerId: art.ownerId,
+                                  recipientName: art.displayName,
+                                  contextType: 'artisan',
+                                  contextId: art.id,
+                                  contextTitle: `${getCategoryLabel(
+                                    art.profession,
+                                    lang
+                                  )} · ${art.wilaya}`,
+                                })
+                              }
+                            >
+                              <MessageSquare size={14} />
+                              <span>{t.prosContactBtn}</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => openPortal('request')}
+                            >
+                              <span>{t.heroPostRequest}</span>
+                            </button>
+                          )}
+                        </div>
+                      </SpotlightCard>
+                    </RevealBlock>
+                  );
+                })}
               </div>
             )}
           </div>
         </section>
 
-        {/* SECTION 5: Customer Service Requests Board */}
+        {/* SECTION 7: Customer Service Requests to Our Team */}
         <section id="requests" className="requests-section">
           <div className="container">
             <div className="gallery-header">
@@ -1129,7 +1583,7 @@ export default function App() {
               </button>
             </div>
 
-            {requestsLoading ? (
+            {requestsLoading && requests.length === 0 ? (
               <div className="gallery-empty">
                 <p>...</p>
               </div>
@@ -1216,7 +1670,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* SECTION 6: Pinned 4-Stage Architectural Showcase (Preserved) */}
+        {/* SECTION 8: Pinned 4-Stage Architectural Showcase (Preserved) */}
         <section id="showcase" ref={showcaseRef} className="showcase-pin">
           <div className="showcase-viewport">
             <div className="showcase-frames">
@@ -1249,7 +1703,7 @@ export default function App() {
               </div>
 
               <div className="showcase-dots" role="tablist">
-                {showcaseStages.map((stage, i) => (
+                {showcaseStages.map((_stage, i) => (
                   <button
                     key={i}
                     type="button"
@@ -1265,7 +1719,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* SECTION 7: Before & After Renovation Comparison (Preserved) */}
+        {/* SECTION 9: Before & After Renovation Comparison (Preserved) */}
         <section id="comparison" className="thermal-section">
           <div className="container thermal-grid">
             <div
@@ -1380,7 +1834,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* SECTION 8: Asymmetric Bento Craftsmanship (Preserved) */}
+        {/* SECTION 10: Asymmetric Bento Craftsmanship (Preserved) */}
         <section id="services" className="bento-section">
           <div className="container">
             <div className="section-header-stack">
@@ -1433,7 +1887,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* SECTION 9: Public Works & Photos Gallery (Preserved + Unified Filtering) */}
+        {/* SECTION 11: Public Before/After Works Gallery */}
         <section id="gallery" className="gallery-section">
           <div className="container">
             <div className="gallery-header">
@@ -1451,7 +1905,7 @@ export default function App() {
               </button>
             </div>
 
-            {projectsLoading && firestoreProjects.length === 0 ? (
+            {projectsLoading && allProjects.length === 0 ? (
               <div className="gallery-empty">
                 <p>...</p>
               </div>
@@ -1461,39 +1915,57 @@ export default function App() {
               </div>
             ) : (
               <div className="projects-grid">
-                {filteredProjects.map((project) => (
-                  <button
-                    key={project.id}
-                    type="button"
-                    className="project-card"
-                    onClick={() => setSelectedProject(project)}
-                  >
-                    <div className="project-thumb-wrap">
-                      <img
-                        src={project.coverImage}
-                        alt={project.title}
-                        className="project-thumb-img"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                    <div className="project-card-body">
-                      <div className="project-meta-line">
-                        <span>{getCategoryLabel(project.category, lang)}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>{project.location}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className="tabular-nums">{project.areaSqm}</span>
+                {filteredProjects.map((project, idx) => (
+                  <RevealBlock key={project.id} delay={(idx % 3) * 0.04}>
+                    <button
+                      type="button"
+                      className="project-card w-full"
+                      onClick={() => setSelectedProject(project)}
+                    >
+                      <div className="project-thumb-wrap">
+                        <img
+                          src={project.coverImage}
+                          alt={project.title}
+                          className="project-thumb-img"
+                          referrerPolicy="no-referrer"
+                        />
+                        {project.beforeImage && (
+                          <span className="project-before-after-note">
+                            {lang === 'ar' ? 'قبل / بعد' : 'Avant / Après'}
+                          </span>
+                        )}
                       </div>
-                      <h3 className="project-card-title">{project.title}</h3>
-                      <p className="project-card-desc">{project.description}</p>
-                      <div className="project-card-foot">
-                        <span>{project.ownerName}</span>
-                        <span className="project-view-cta">
-                          {t.galleryViewPhotos}
-                        </span>
+                      <div className="project-card-body">
+                        <div className="project-meta-line">
+                          <span>
+                            {getCategoryLabel(project.category, lang)}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span>{project.location}</span>
+                          <span aria-hidden="true">·</span>
+                          <span className="tabular-nums">
+                            {project.areaSqm}
+                          </span>
+                        </div>
+                        <h3 className="project-card-title">{project.title}</h3>
+                        <p className="project-card-desc">
+                          {project.description}
+                        </p>
+                        {project.completedServices &&
+                          project.completedServices.length > 0 && (
+                            <p className="artisan-skills-line">
+                              {project.completedServices.slice(0, 3).join(' · ')}
+                            </p>
+                          )}
+                        <div className="project-card-foot">
+                          <span>{project.ownerName}</span>
+                          <span className="project-view-cta">
+                            {t.galleryViewPhotos}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                  </RevealBlock>
                 ))}
               </div>
             )}
@@ -1506,6 +1978,7 @@ export default function App() {
           <span className="footer-brand">{t.brand}</span>
           <span>{t.footerTag}</span>
           <div className="footer-actions">
+            <PWAInstallButton lang={lang} variant="footer" />
             <button
               type="button"
               className="theme-switch-btn"
@@ -1526,6 +1999,8 @@ export default function App() {
         </div>
       </footer>
 
+      <OfflineIndicator lang={lang} />
+
       <ProjectLightbox
         project={selectedProject}
         user={user}
@@ -1545,8 +2020,11 @@ export default function App() {
         artisan={selectedArtisan}
         linkedProjects={
           selectedArtisan
-            ? firestoreProjects.filter(
-                (p) => p.ownerId === selectedArtisan.ownerId
+            ? allProjects.filter(
+                (p) =>
+                  p.artisanId === selectedArtisan.id ||
+                  (p.ownerId !== 'curated' &&
+                    p.ownerId === selectedArtisan.ownerId)
               )
             : []
         }
@@ -1617,6 +2095,10 @@ export default function App() {
         editingArtisan={editingArtisan}
         userProjects={userProjects}
         userArtisans={userArtisans}
+        allArtisans={displayedArtisans}
+        firestoreSkills={firestoreSkills}
+        firestoreServices={firestoreServices}
+        hasFirestoreArtisans={artisans.length > 0}
         onClose={() => setDrawerOpen(false)}
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}

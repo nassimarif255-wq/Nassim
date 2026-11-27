@@ -2,7 +2,7 @@
   "entities": {
     "Project": {
       "title": "Project",
-      "description": "A public construction, ceramics, or home service project showcased on dz darkom pro.",
+      "description": "A public construction, ceramics, welding, or home renovation project showcased by the dz darkom pro team with optional before/after comparison.",
       "type": "object",
       "properties": {
         "title": { "type": "string", "minLength": 3, "maxLength": 120 },
@@ -11,6 +11,7 @@
           "enum": [
             "construction_renovation",
             "ceramics",
+            "welding",
             "electricity",
             "plumbing",
             "carpentry",
@@ -27,6 +28,9 @@
         "areaSqm": { "type": "string", "minLength": 1, "maxLength": 30 },
         "description": { "type": "string", "minLength": 5, "maxLength": 1500 },
         "coverImage": { "type": "string", "minLength": 10, "maxLength": 450000 },
+        "beforeImage": { "type": "string", "minLength": 0, "maxLength": 450000 },
+        "completedServices": { "type": "array" },
+        "artisanId": { "type": "string", "minLength": 0, "maxLength": 128 },
         "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "ownerName": { "type": "string", "minLength": 1, "maxLength": 100 },
         "createdAt": { "type": "string", "format": "date-time" },
@@ -36,7 +40,7 @@
     },
     "ProjectPhoto": {
       "title": "ProjectPhoto",
-      "description": "Additional gallery photo attached to a project, artisan profile, or customer request.",
+      "description": "Additional gallery photo attached to a project, team craftsman profile, or customer request.",
       "type": "object",
       "properties": {
         "imageUrl": { "type": "string", "minLength": 10, "maxLength": 450000 },
@@ -48,15 +52,17 @@
     },
     "ArtisanProfile": {
       "title": "ArtisanProfile",
-      "description": "Public professional profile for a tradesperson or contractor on dz darkom pro.",
+      "description": "Official team craftsman profile on dz darkom pro including specialty, experience, location, skills, and portfolio.",
       "type": "object",
       "properties": {
         "displayName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "roleTitle": { "type": "string", "minLength": 0, "maxLength": 100 },
         "profession": {
           "type": "string",
           "enum": [
             "construction_renovation",
             "ceramics",
+            "welding",
             "electricity",
             "plumbing",
             "carpentry",
@@ -69,16 +75,86 @@
         "wilaya": { "type": "string", "minLength": 2, "maxLength": 60 },
         "commune": { "type": "string", "minLength": 2, "maxLength": 60 },
         "bio": { "type": "string", "minLength": 10, "maxLength": 1200 },
-        "avatarUrl": { "type": "string", "minLength": 0, "maxLength": 350000 },
+        "skillsList": { "type": "array" },
+        "avatarUrl": { "type": "string", "minLength": 0, "maxLength": 450000 },
         "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["displayName", "profession", "experienceYears", "wilaya", "commune", "bio", "avatarUrl", "ownerId", "createdAt", "updatedAt"]
     },
+    "TeamSkill": {
+      "title": "TeamSkill",
+      "description": "Team skill and technical expertise managed by admin on dz darkom pro.",
+      "type": "object",
+      "properties": {
+        "nameAr": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "nameFr": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "category": {
+          "type": "string",
+          "enum": [
+            "construction_renovation",
+            "ceramics",
+            "welding",
+            "electricity",
+            "plumbing",
+            "carpentry",
+            "painting",
+            "hvac",
+            "solar"
+          ]
+        },
+        "level": { "type": "string", "enum": ["expert", "advanced", "certified"] },
+        "summaryAr": { "type": "string", "minLength": 5, "maxLength": 350 },
+        "summaryFr": { "type": "string", "minLength": 5, "maxLength": 350 },
+        "toolsAr": { "type": "string", "minLength": 0, "maxLength": 180 },
+        "sortOrder": { "type": "number" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nameAr", "nameFr", "category", "level", "summaryAr", "summaryFr", "toolsAr", "sortOrder", "ownerId", "createdAt", "updatedAt"]
+    },
+    "TeamServiceGuide": {
+      "title": "TeamServiceGuide",
+      "description": "Detailed service guide explaining nature of work, deliverables, execution stages, and client outcomes.",
+      "type": "object",
+      "properties": {
+        "titleAr": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "titleFr": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "category": {
+          "type": "string",
+          "enum": [
+            "construction_renovation",
+            "ceramics",
+            "welding",
+            "electricity",
+            "plumbing",
+            "carpentry",
+            "painting",
+            "hvac",
+            "solar"
+          ]
+        },
+        "natureAr": { "type": "string", "minLength": 5, "maxLength": 600 },
+        "natureFr": { "type": "string", "minLength": 5, "maxLength": 600 },
+        "deliverablesAr": { "type": "string", "minLength": 5, "maxLength": 900 },
+        "deliverablesFr": { "type": "string", "minLength": 5, "maxLength": 900 },
+        "stagesAr": { "type": "string", "minLength": 5, "maxLength": 900 },
+        "stagesFr": { "type": "string", "minLength": 5, "maxLength": 900 },
+        "outcomeAr": { "type": "string", "minLength": 5, "maxLength": 500 },
+        "outcomeFr": { "type": "string", "minLength": 5, "maxLength": 500 },
+        "durationLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "sortOrder": { "type": "number" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["titleAr", "titleFr", "category", "natureAr", "natureFr", "deliverablesAr", "deliverablesFr", "stagesAr", "stagesFr", "outcomeAr", "outcomeFr", "durationLabel", "sortOrder", "ownerId", "createdAt", "updatedAt"]
+    },
     "ServiceRequest": {
       "title": "ServiceRequest",
-      "description": "Public customer service request specifying profession needed, problem details, and wilaya/commune.",
+      "description": "Customer service request sent to the dz darkom pro team specifying specialty, details, and wilaya/commune.",
       "type": "object",
       "properties": {
         "title": { "type": "string", "minLength": 3, "maxLength": 120 },
@@ -87,6 +163,7 @@
           "enum": [
             "construction_renovation",
             "ceramics",
+            "welding",
             "electricity",
             "plumbing",
             "carpentry",
@@ -109,7 +186,7 @@
     },
     "Inquiry": {
       "title": "Inquiry",
-      "description": "Private two-way message and contact exchange between a customer and a professional.",
+      "description": "Private two-way message and contact exchange between a client and the dz darkom pro team.",
       "type": "object",
       "properties": {
         "senderId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
@@ -130,9 +207,17 @@
     }
   },
   "firestore": {
+    "/skills/{skillId}": {
+      "schema": { "$ref": "#/entities/TeamSkill" },
+      "description": "Public directory of official team skills & specialties managed by admin."
+    },
+    "/services/{serviceId}": {
+      "schema": { "$ref": "#/entities/TeamServiceGuide" },
+      "description": "Public detailed service guides covering nature, deliverables, stages, and outcomes."
+    },
     "/projects/{projectId}": {
       "schema": { "$ref": "#/entities/Project" },
-      "description": "Public showcase of works across all trades."
+      "description": "Public showcase of real projects with before/after comparison across all specialties."
     },
     "/projects/{projectId}/photos/{photoId}": {
       "schema": { "$ref": "#/entities/ProjectPhoto" },
@@ -140,15 +225,15 @@
     },
     "/artisans/{artisanId}": {
       "schema": { "$ref": "#/entities/ArtisanProfile" },
-      "description": "Public directory of tradesperson profiles."
+      "description": "Official team craftsman profiles with specialty, experience, skills, and portfolio."
     },
     "/artisans/{artisanId}/photos/{photoId}": {
       "schema": { "$ref": "#/entities/ProjectPhoto" },
-      "description": "Portfolio photos attached to an artisan profile."
+      "description": "Portfolio photos attached to a team craftsman profile."
     },
     "/requests/{requestId}": {
       "schema": { "$ref": "#/entities/ServiceRequest" },
-      "description": "Public board of customer service requests."
+      "description": "Customer service requests directed to the team."
     },
     "/requests/{requestId}/photos/{photoId}": {
       "schema": { "$ref": "#/entities/ProjectPhoto" },
@@ -156,7 +241,7 @@
     },
     "/inquiries/{inquiryId}": {
       "schema": { "$ref": "#/entities/Inquiry" },
-      "description": "Private direct communication messages between customers and tradespeople."
+      "description": "Private direct communication messages between clients and team craftsmen."
     }
   }
 }
