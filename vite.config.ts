@@ -22,7 +22,7 @@ export default defineConfig({
         name: 'اخدم دارك · DZ Darkom Pro',
         short_name: 'dz darkom',
         description:
-          'الموقع الرسمي لفريق DZ Darkom Pro لخدمات البناء والسيراميك والترميم واللحام والكهرباء والسباكة في الجزائر.',
+          'الموقع الرسمي لفريق DZ Darkom Pro لخدمات البناء والسيراميك والترميم والكهرباء والسباكة في الجزائر.',
         theme_color: '#2f4a3b',
         background_color: '#f5f4f0',
         display: 'standalone',

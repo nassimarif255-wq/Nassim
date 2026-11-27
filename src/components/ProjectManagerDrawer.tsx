@@ -23,12 +23,20 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import {
+  db,
+  formatFirebaseError,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase';
 import {
   ArtisanRecord,
   InquiryRecord,
+  isValidProjectCategory,
+  isValidServiceCategory,
   ProjectCategory,
   ProjectRecord,
+  sanitizeServiceCategory,
   ServiceRequestRecord,
   TeamServiceGuideRecord,
   TeamSkillRecord,
@@ -184,7 +192,11 @@ export function ProjectManagerDrawer({
     if (editingProject && isAdmin) {
       setActiveTab('project');
       setProjTitle(editingProject.title);
-      setProjCategory(editingProject.category);
+      setProjCategory(
+        isValidProjectCategory(editingProject.category)
+          ? editingProject.category
+          : 'ceramics'
+      );
       setProjLocation(editingProject.location);
       setProjArea(editingProject.areaSqm);
       setProjDesc(editingProject.description);
@@ -217,7 +229,7 @@ export function ProjectManagerDrawer({
       setActiveTab('artisan');
       setArtName(editingArtisan.displayName);
       setArtRoleTitle(editingArtisan.roleTitle || '');
-      setArtProf(editingArtisan.profession);
+      setArtProf(sanitizeServiceCategory(editingArtisan.profession));
       setArtExp(String(editingArtisan.experienceYears));
       setArtWilaya(editingArtisan.wilaya);
       setArtCommune(editingArtisan.commune);
@@ -459,6 +471,20 @@ export function ProjectManagerDrawer({
       return;
     }
 
+    if (!isValidProjectCategory(projCategory)) {
+      setErrorMsg(
+        lang === 'ar'
+          ? 'يرجى اختيار تخصص معتمد.'
+          : 'Veuillez sélectionner une spécialité valide.'
+      );
+      return;
+    }
+
+    const safeArtisanId =
+      projArtisanId && allArtisans.some((a) => a.id === projArtisanId)
+        ? projArtisanId
+        : '';
+
     setErrorMsg('');
     setSuccessMsg('');
     setSubmitting(true);
@@ -475,7 +501,7 @@ export function ProjectManagerDrawer({
           beforeImage: projBefore,
           completedServices,
           specialties,
-          artisanId: projArtisanId,
+          artisanId: safeArtisanId,
           updatedAt: serverTimestamp(),
         }).catch((err) =>
           handleFirestoreError(err, OperationType.UPDATE, path)
@@ -501,7 +527,7 @@ export function ProjectManagerDrawer({
           beforeImage: projBefore,
           completedServices,
           specialties,
-          artisanId: projArtisanId,
+          artisanId: safeArtisanId,
           ownerId: user.uid,
           ownerName: (user.displayName || 'فريق اخدم دارك').slice(0, 100),
           createdAt: serverTimestamp(),
@@ -542,6 +568,8 @@ export function ProjectManagerDrawer({
             : 'Projet réel publié dans la galerie.'
         );
       }
+    } catch (err) {
+      setErrorMsg(formatFirebaseError(err, lang));
     } finally {
       setSubmitting(false);
     }
@@ -563,12 +591,13 @@ export function ProjectManagerDrawer({
       cleanName.length < 2 ||
       cleanWilaya.length < 2 ||
       cleanCommune.length < 2 ||
-      cleanBio.length < 10
+      cleanBio.length < 10 ||
+      !isValidServiceCategory(artProf)
     ) {
       setErrorMsg(
         lang === 'ar'
-          ? 'يرجى إدخال الاسم، الولاية، البلدية، ونبذة خبرة (10 أحرف على الأقل).'
-          : 'Veuillez renseigner le nom, la wilaya, la commune et une bio (min 10 caractères).'
+          ? 'يرجى إدخال الاسم، التخصص، الولاية، البلدية، ونبذة خبرة (10 أحرف على الأقل).'
+          : 'Veuillez renseigner le nom, la spécialité, la wilaya, la commune et une bio (min 10 caractères).'
       );
       return;
     }
@@ -652,6 +681,8 @@ export function ProjectManagerDrawer({
             : 'Profil membre publié.'
         );
       }
+    } catch (err) {
+      setErrorMsg(formatFirebaseError(err, lang));
     } finally {
       setSubmitting(false);
     }
@@ -670,12 +701,13 @@ export function ProjectManagerDrawer({
       cleanTitle.length < 3 ||
       cleanWilaya.length < 2 ||
       cleanCommune.length < 2 ||
-      cleanDesc.length < 10
+      cleanDesc.length < 10 ||
+      !isValidServiceCategory(reqCategory)
     ) {
       setErrorMsg(
         lang === 'ar'
-          ? 'يرجى إدخال عنوان الطلب، المنطقة، ووصف المشكلة (10 أحرف على الأقل).'
-          : 'Veuillez renseigner le titre, la zone et la description (min 10 caractères).'
+          ? 'يرجى إدخال عنوان الطلب، التخصص، المنطقة، ووصف المشكلة (10 أحرف على الأقل).'
+          : 'Veuillez renseigner le titre, la spécialité, la zone et la description (min 10 caractères).'
       );
       return;
     }
@@ -730,6 +762,8 @@ export function ProjectManagerDrawer({
           ? 'تم إرسال طلبك لفريقنا بنجاح وستتم مراجعته والرد عليك.'
           : 'Demande transmise à notre équipe.'
       );
+    } catch (err) {
+      setErrorMsg(formatFirebaseError(err, lang));
     } finally {
       setSubmitting(false);
     }
@@ -738,13 +772,18 @@ export function ProjectManagerDrawer({
   const handleSendReply = async (inq: InquiryRecord) => {
     const text = (replyDrafts[inq.id] || '').trim();
     if (!text || !user) return;
-    const path = `inquiries/${inq.id}`;
-    await updateDoc(doc(db, 'inquiries', inq.id), {
-      replyText: text.slice(0, 1000),
-      status: 'replied',
-      updatedAt: serverTimestamp(),
-    }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
-    setReplyDrafts((prev) => ({ ...prev, [inq.id]: '' }));
+    setErrorMsg('');
+    try {
+      const path = `inquiries/${inq.id}`;
+      await updateDoc(doc(db, 'inquiries', inq.id), {
+        replyText: text.slice(0, 1000),
+        status: 'replied',
+        updatedAt: serverTimestamp(),
+      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+      setReplyDrafts((prev) => ({ ...prev, [inq.id]: '' }));
+    } catch (err) {
+      setErrorMsg(formatFirebaseError(err, lang));
+    }
   };
 
   const pendingInboxCount = incomingInquiries.filter(
@@ -1541,8 +1580,8 @@ export function ProjectManagerDrawer({
                         className="form-input"
                         placeholder={
                           lang === 'ar'
-                            ? 'بورسلان كبير المقاس، لحام TIG، عزل مائي'
-                            : 'Grès cérame, soudure TIG, étanchéité'
+                            ? 'بورسلان كبير المقاس، عزل مائي، وزن ليزري'
+                            : 'Grès cérame, étanchéité, niveau laser'
                         }
                         value={artSkillsRaw}
                         onChange={(e) => setArtSkillsRaw(e.target.value)}
@@ -1761,8 +1800,8 @@ export function ProjectManagerDrawer({
                         className="form-input"
                         placeholder={
                           lang === 'ar'
-                            ? 'مثال: تجديد سيراميك الحمام أو لحام بوابة حديدية'
-                            : 'Ex : Rénovation carrelage ou portail soudé'
+                            ? 'مثال: تجديد سيراميك الحمام أو تأسيس شبكة الكهرباء'
+                            : 'Ex : Rénovation carrelage ou installation électrique'
                         }
                         maxLength={120}
                         required

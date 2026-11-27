@@ -11,7 +11,12 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import { MoveHorizontal, Pencil, Trash2, Upload, X } from 'lucide-react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import {
+  db,
+  formatFirebaseError,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase';
 import { ProjectPhotoItem, ProjectRecord } from '../data/showcaseDefaults';
 import { AppLang, getCategoryLabel } from '../data/i18n';
 import { uploadMediaImage } from '../utils/mediaStorage';
@@ -143,9 +148,7 @@ export function ProjectLightbox({
       setViewMode('gallery');
       setActivePhotoIdx(allPhotos.length);
     } catch (err) {
-      setPhotoError(
-        err instanceof Error ? err.message : 'تعذر رفع الصورة الإضافية.'
-      );
+      setPhotoError(formatFirebaseError(err, lang));
     } finally {
       setAddingPhoto(false);
     }
@@ -153,12 +156,15 @@ export function ProjectLightbox({
 
   const handleDeleteExtraPhoto = async (photoId: string) => {
     if (!user || !canManage) return;
+    setPhotoError('');
     const path = `projects/${project.id}/photos/${photoId}`;
     try {
-      await deleteDoc(doc(db, 'projects', project.id, 'photos', photoId));
+      await deleteDoc(doc(db, 'projects', project.id, 'photos', photoId)).catch(
+        (err) => handleFirestoreError(err, OperationType.DELETE, path)
+      );
       setActivePhotoIdx(0);
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, path);
+      setPhotoError(formatFirebaseError(err, lang));
     }
   };
 

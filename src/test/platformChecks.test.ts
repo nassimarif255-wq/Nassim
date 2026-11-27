@@ -6,6 +6,14 @@ import {
   CURATED_SERVICES,
   CURATED_SKILLS,
   CURATED_TEAM_MEMBERS,
+  isValidProjectCategory,
+  isValidServiceCategory,
+  mergeCatalogWithDefaults,
+  sanitizeArtisansList,
+  sanitizeProjectsList,
+  type ArtisanRecord,
+  type ProjectRecord,
+  type TeamSkillRecord,
 } from '../data/showcaseDefaults';
 import {
   getCategoryLabel,
@@ -16,14 +24,65 @@ import { ALGERIA_WILAYAS } from '../data/algeriaLocations';
 import { parseTagInput } from '../components/ProjectManagerDrawer';
 import { ADMIN_EMAIL, matchesCategoryFilter } from '../App';
 
-describe('DZ Darkom Pro — Official Team Integrity & Data Validation', () => {
+describe('DZ Darkom Pro — Official Team Integrity, Zero Welding & Data Validation', () => {
   it('contains zero fake team members or fake completed projects in defaults', () => {
     expect(CURATED_TEAM_MEMBERS).toEqual([]);
     expect(CURATED_PROJECTS).toEqual([]);
   });
 
-  it('provides complete bilingual copy and 9 official service categories', () => {
-    expect(SERVICE_CATEGORIES.length).toBe(9);
+  it('completely excludes welding specialty from categories, templates, copy, schema, HTML, and assets', () => {
+    const categoryIds = SERVICE_CATEGORIES.map((c) => c.id);
+    expect(categoryIds).not.toContain('welding');
+    expect(isValidServiceCategory('welding')).toBe(false);
+    expect(isValidProjectCategory('welding')).toBe(false);
+
+    for (const sk of CURATED_SKILLS) {
+      expect(sk.category).not.toBe('welding');
+      expect(sk.nameAr + sk.nameFr + sk.toolsAr).not.toMatch(/لحام|حدادة|soudure|ferronnerie/i);
+    }
+    for (const srv of CURATED_SERVICES) {
+      expect(srv.category).not.toBe('welding');
+      expect(srv.titleAr + srv.titleFr + srv.natureAr + srv.natureFr).not.toMatch(
+        /لحام|حدادة|soudure|ferronnerie/i
+      );
+    }
+
+    const arJoined = Object.values(UI_COPY.ar).join(' ');
+    const frJoined = Object.values(UI_COPY.fr).join(' ');
+    expect(arJoined).not.toMatch(/لحام|الحدادة/);
+    expect(frJoined).not.toMatch(/soudure|ferronnerie/i);
+
+    const rootDir = process.cwd();
+    const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+    const blueprint = fs.readFileSync(
+      path.join(rootDir, 'firebase-blueprint.json'),
+      'utf8'
+    );
+    const fsRules = fs.readFileSync(
+      path.join(rootDir, 'firestore.rules'),
+      'utf8'
+    );
+    const viteCfg = fs.readFileSync(
+      path.join(rootDir, 'vite.config.ts'),
+      'utf8'
+    );
+
+    expect(indexHtml).not.toMatch(/لحام|soudure/i);
+    expect(viteCfg).not.toMatch(/لحام|soudure|welding/i);
+    expect(blueprint).not.toContain('"welding"');
+    expect(fsRules).not.toContain("'welding'");
+    expect(
+      fs.existsSync(
+        path.join(
+          rootDir,
+          'src/assets/images/welding_metalwork_craft_1795808273381.jpg'
+        )
+      )
+    ).toBe(false);
+  });
+
+  it('provides complete bilingual copy and 8 official service categories', () => {
+    expect(SERVICE_CATEGORIES.length).toBe(8);
     for (const cat of SERVICE_CATEGORIES) {
       expect(cat.ar.trim().length).toBeGreaterThan(2);
       expect(cat.fr.trim().length).toBeGreaterThan(2);
@@ -37,7 +96,7 @@ describe('DZ Darkom Pro — Official Team Integrity & Data Validation', () => {
   });
 
   it('validates technical skill templates against Firestore blueprint limits', () => {
-    expect(CURATED_SKILLS.length).toBeGreaterThanOrEqual(8);
+    expect(CURATED_SKILLS.length).toBeGreaterThanOrEqual(7);
     for (const sk of CURATED_SKILLS) {
       expect(sk.nameAr.length).toBeGreaterThanOrEqual(2);
       expect(sk.nameAr.length).toBeLessThanOrEqual(100);
@@ -53,7 +112,7 @@ describe('DZ Darkom Pro — Official Team Integrity & Data Validation', () => {
   });
 
   it('validates detailed service guide templates cover all 6 required dimensions', () => {
-    expect(CURATED_SERVICES.length).toBeGreaterThanOrEqual(5);
+    expect(CURATED_SERVICES.length).toBeGreaterThanOrEqual(4);
     for (const srv of CURATED_SERVICES) {
       expect(srv.titleAr.length).toBeGreaterThanOrEqual(3);
       expect(srv.natureAr.length).toBeGreaterThanOrEqual(5);
@@ -64,6 +123,93 @@ describe('DZ Darkom Pro — Official Team Integrity & Data Validation', () => {
       expect(srv.outcomeAr.length).toBeGreaterThanOrEqual(5);
       expect(srv.durationLabel.length).toBeLessThanOrEqual(60);
     }
+  });
+
+  it('merges Firestore skills/services with default templates cleanly and strips legacy welding docs', () => {
+    const customSkill: TeamSkillRecord = {
+      ...CURATED_SKILLS[0],
+      id: 'custom-solar-1',
+      nameAr: 'تركيب الألواح الهجينة',
+      nameFr: 'Panneaux solaires hybrides',
+      category: 'solar',
+      sortOrder: 99,
+      ownerId: 'admin',
+    };
+    const overrideCeramics: TeamSkillRecord = {
+      ...CURATED_SKILLS[0],
+      nameAr: 'تركيب بورسلان محدث',
+      ownerId: 'admin',
+    };
+    const legacyWeldingSkill = {
+      ...CURATED_SKILLS[0],
+      id: 'legacy-welding',
+      category: 'welding',
+    } as unknown as TeamSkillRecord;
+
+    const merged = mergeCatalogWithDefaults(
+      [customSkill, overrideCeramics, legacyWeldingSkill],
+      CURATED_SKILLS
+    );
+
+    expect(merged.some((s) => s.id === 'legacy-welding')).toBe(false);
+    expect(merged.some((s) => s.id === 'custom-solar-1')).toBe(true);
+    expect(
+      merged.find((s) => s.id === CURATED_SKILLS[0].id)?.nameAr
+    ).toBe('تركيب بورسلان محدث');
+    expect(merged.length).toBe(CURATED_SKILLS.length + 1);
+  });
+
+  it('filters out legacy demo or removed-category projects and artisans', () => {
+    const validProj: ProjectRecord = {
+      id: 'proj_real_1',
+      title: 'فيلا حيدرة',
+      category: 'ceramics',
+      location: 'الجزائر العاصمة',
+      areaSqm: '180 م²',
+      description: 'تبليط كامل بالبورسلان.',
+      coverImage: 'https://example.com/a.jpg',
+      ownerId: 'admin',
+      ownerName: 'فريق اخدم دارك',
+    };
+    const demoProj: ProjectRecord = {
+      ...validProj,
+      id: 'curated-demo-1',
+    };
+    const weldingProj = {
+      ...validProj,
+      id: 'proj_old_weld',
+      category: 'welding',
+    } as unknown as ProjectRecord;
+
+    const sanitizedProjects = sanitizeProjectsList([
+      validProj,
+      demoProj,
+      weldingProj,
+    ]);
+    expect(sanitizedProjects.map((p) => p.id)).toEqual(['proj_real_1']);
+
+    const validArtisan: ArtisanRecord = {
+      id: 'art_real_1',
+      displayName: 'أحمد',
+      profession: 'ceramics',
+      experienceYears: 8,
+      wilaya: 'الجزائر العاصمة',
+      commune: 'حيدرة',
+      bio: 'مختص في البورسلان والرخام.',
+      avatarUrl: '',
+      ownerId: 'admin',
+    };
+    const weldingArtisan = {
+      ...validArtisan,
+      id: 'art_old_weld',
+      profession: 'welding',
+    } as unknown as ArtisanRecord;
+
+    const sanitizedArtisans = sanitizeArtisansList([
+      validArtisan,
+      weldingArtisan,
+    ]);
+    expect(sanitizedArtisans.map((a) => a.id)).toEqual(['art_real_1']);
   });
 
   it('covers all 58 Algerian wilayas with communes', () => {
@@ -91,7 +237,7 @@ describe('DZ Darkom Pro — Official Team Integrity & Data Validation', () => {
     expect(
       matchesCategoryFilter('renovation', 'construction_renovation')
     ).toBe(true);
-    expect(matchesCategoryFilter('welding', 'ceramics')).toBe(false);
+    expect(matchesCategoryFilter('electricity', 'ceramics')).toBe(false);
   });
 
   it('enforces exclusive Admin write rules in firestore.rules and storage.rules', () => {

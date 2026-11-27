@@ -15,11 +15,18 @@ import {
   Save,
   Trash2,
 } from 'lucide-react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import {
+  db,
+  formatFirebaseError,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase';
 import {
   type ArtisanRecord,
   CURATED_SERVICES,
   CURATED_SKILLS,
+  isValidServiceCategory,
+  sanitizeServiceCategory,
   type ServiceRequestRecord,
   type SkillLevelId,
   type TeamServiceGuideRecord,
@@ -151,18 +158,42 @@ export function AdminDashboardTab({
     const sAr = skSummaryAr.trim();
     const sFr = (skSummaryFr.trim() || sAr).slice(0, 450);
 
-    if (nAr.length < 2 || sAr.length < 5) {
+    if (!isValidServiceCategory(skCat)) {
       setErrMsg(
         lang === 'ar'
-          ? 'يرجى إدخال اسم المهارة والوصف (5 أحرف على الأقل).'
-          : 'Nom et description requis (min 5 caractères).'
+          ? 'يرجى اختيار تخصص معتمد.'
+          : 'Veuillez sélectionner une spécialité valide.'
       );
       return;
     }
 
+    if (nAr.length < 2 || nFr.length < 2 || sAr.length < 5 || sFr.length < 5) {
+      setErrMsg(
+        lang === 'ar'
+          ? 'يرجى إدخال اسم المهارة (حرفان على الأقل) والوصف (5 أحرف على الأقل).'
+          : 'Nom (min 2 car.) et description (min 5 car.) requis.'
+      );
+      return;
+    }
+
+    const parsedOrder = Number(skOrder);
+    if (!Number.isFinite(parsedOrder) || parsedOrder < 0 || parsedOrder > 999) {
+      setErrMsg(
+        lang === 'ar'
+          ? 'رقم الترتيب يجب أن يكون بين 0 و 999.'
+          : 'L’ordre doit être compris entre 0 et 999.'
+      );
+      return;
+    }
+
+    const safeArtisanId =
+      skArtisanId && artisans.some((a) => a.id === skArtisanId)
+        ? skArtisanId
+        : '';
+
     setSaving(true);
     try {
-      const sortNum = Math.max(0, Math.min(999, Number(skOrder) || 1));
+      const sortNum = Math.round(parsedOrder);
       const payload = {
         nameAr: nAr.slice(0, 100),
         nameFr: nFr,
@@ -175,7 +206,7 @@ export function AdminDashboardTab({
         toolsFr: (skToolsFr.trim() || skToolsAr.trim()).slice(0, 220),
         tasksAr: skTasksAr.trim().slice(0, 600),
         tasksFr: (skTasksFr.trim() || skTasksAr.trim()).slice(0, 600),
-        artisanId: skArtisanId,
+        artisanId: safeArtisanId,
         sortOrder: sortNum,
         updatedAt: serverTimestamp(),
       };
@@ -206,24 +237,37 @@ export function AdminDashboardTab({
         );
         resetSkillForm();
       }
+    } catch (err) {
+      setErrMsg(formatFirebaseError(err, lang));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDeleteSkill = async (id: string) => {
-    const path = `skills/${id}`;
-    await deleteDoc(doc(db, 'skills', id)).catch((err) =>
-      handleFirestoreError(err, OperationType.DELETE, path)
-    );
-    if (editingSkillId === id) resetSkillForm();
+    setErrMsg('');
+    setStatusMsg('');
+    try {
+      const path = `skills/${id}`;
+      await deleteDoc(doc(db, 'skills', id)).catch((err) =>
+        handleFirestoreError(err, OperationType.DELETE, path)
+      );
+      if (editingSkillId === id) resetSkillForm();
+    } catch (err) {
+      setErrMsg(formatFirebaseError(err, lang));
+    }
   };
+
+  const missingBaselineSkills = CURATED_SKILLS.filter(
+    (def) => !firestoreSkills.some((existing) => existing.id === def.id)
+  );
 
   const handleSeedBaselineSkills = async () => {
     setSaving(true);
     setErrMsg('');
+    setStatusMsg('');
     try {
-      for (const sk of CURATED_SKILLS) {
+      for (const sk of missingBaselineSkills) {
         const id = sk.id.replace(/[^a-zA-Z0-9_-]/g, '_');
         await setDoc(doc(db, 'skills', id), {
           nameAr: sk.nameAr,
@@ -251,6 +295,8 @@ export function AdminDashboardTab({
           ? 'تم استيراد قوالب المهارات التقنية في قاعدة البيانات.'
           : 'Modèles de compétences importés dans Firestore.'
       );
+    } catch (err) {
+      setErrMsg(formatFirebaseError(err, lang));
     } finally {
       setSaving(false);
     }
@@ -264,38 +310,66 @@ export function AdminDashboardTab({
     const tAr = srvTitleAr.trim();
     const tFr = (srvTitleFr.trim() || tAr).slice(0, 120);
     const nAr = srvNatureAr.trim();
+    const nFr = (srvNatureFr.trim() || nAr).slice(0, 600);
     const dAr = srvDelivAr.trim();
+    const dFr = (srvDelivFr.trim() || dAr).slice(0, 900);
     const stAr = srvStagesAr.trim();
+    const stFr = (srvStagesFr.trim() || stAr).slice(0, 900);
     const oAr = srvOutcomeAr.trim();
+    const oFr = (srvOutcomeFr.trim() || oAr).slice(0, 500);
+
+    if (!isValidServiceCategory(srvCat)) {
+      setErrMsg(
+        lang === 'ar'
+          ? 'يرجى اختيار تخصص معتمد.'
+          : 'Veuillez sélectionner une spécialité valide.'
+      );
+      return;
+    }
 
     if (
       tAr.length < 3 ||
+      tFr.length < 3 ||
       nAr.length < 5 ||
+      nFr.length < 5 ||
       dAr.length < 5 ||
+      dFr.length < 5 ||
       stAr.length < 5 ||
-      oAr.length < 5
+      stFr.length < 5 ||
+      oAr.length < 5 ||
+      oFr.length < 5
     ) {
       setErrMsg(
         lang === 'ar'
-          ? 'يرجى ملء العنوان وطبيعة العمل والخدمات والمراحل والنتيجة.'
-          : 'Veuillez renseigner titre, nature, prestations, étapes et résultat.'
+          ? 'يرجى ملء العنوان (3 أحرف+) وطبيعة العمل والخدمات والمراحل والنتيجة (5 أحرف+ لكل حقل).'
+          : 'Veuillez renseigner titre (min 3 car.), nature, prestations, étapes et résultat (min 5 car.).'
+      );
+      return;
+    }
+
+    const parsedOrder = Number(srvOrder);
+    if (!Number.isFinite(parsedOrder) || parsedOrder < 0 || parsedOrder > 999) {
+      setErrMsg(
+        lang === 'ar'
+          ? 'رقم الترتيب يجب أن يكون بين 0 و 999.'
+          : 'L’ordre doit être compris entre 0 et 999.'
       );
       return;
     }
 
     setSaving(true);
     try {
-      const sortNum = Math.max(0, Math.min(999, Number(srvOrder) || 1));
+      const sortNum = Math.round(parsedOrder);
       const payload = {
         titleAr: tAr.slice(0, 120),
         titleFr: tFr,
         category: srvCat,
         natureAr: nAr.slice(0, 600),
-        natureFr: (srvNatureFr.trim() || nAr).slice(0, 600),
+        natureFr: nFr,
         deliverablesAr: dAr.slice(0, 900),
-        deliverablesFr: (srvDelivFr.trim() || dAr).slice(0, 900),
+        deliverablesFr: dFr,
         stagesAr: stAr.slice(0, 900),
-        stagesFr: (srvStagesFr.trim() || stAr).slice(0, 900),
+        stagesFr: stFr,
         materialsToolsAr: srvMaterialsAr.trim().slice(0, 600),
         materialsToolsFr: (
           srvMaterialsFr.trim() || srvMaterialsAr.trim()
@@ -305,7 +379,7 @@ export function AdminDashboardTab({
           srvQualityFr.trim() || srvQualityAr.trim()
         ).slice(0, 600),
         outcomeAr: oAr.slice(0, 500),
-        outcomeFr: (srvOutcomeFr.trim() || oAr).slice(0, 500),
+        outcomeFr: oFr,
         durationLabel: srvDuration.trim().slice(0, 60),
         sortOrder: sortNum,
         updatedAt: serverTimestamp(),
@@ -337,24 +411,37 @@ export function AdminDashboardTab({
         );
         resetServiceForm();
       }
+    } catch (err) {
+      setErrMsg(formatFirebaseError(err, lang));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDeleteService = async (id: string) => {
-    const path = `services/${id}`;
-    await deleteDoc(doc(db, 'services', id)).catch((err) =>
-      handleFirestoreError(err, OperationType.DELETE, path)
-    );
-    if (editingServiceId === id) resetServiceForm();
+    setErrMsg('');
+    setStatusMsg('');
+    try {
+      const path = `services/${id}`;
+      await deleteDoc(doc(db, 'services', id)).catch((err) =>
+        handleFirestoreError(err, OperationType.DELETE, path)
+      );
+      if (editingServiceId === id) resetServiceForm();
+    } catch (err) {
+      setErrMsg(formatFirebaseError(err, lang));
+    }
   };
+
+  const missingBaselineServices = CURATED_SERVICES.filter(
+    (def) => !firestoreServices.some((existing) => existing.id === def.id)
+  );
 
   const handleSeedBaselineServices = async () => {
     setSaving(true);
     setErrMsg('');
+    setStatusMsg('');
     try {
-      for (const s of CURATED_SERVICES) {
+      for (const s of missingBaselineServices) {
         const id = s.id.replace(/[^a-zA-Z0-9_-]/g, '_');
         await setDoc(doc(db, 'services', id), {
           titleAr: s.titleAr,
@@ -386,6 +473,8 @@ export function AdminDashboardTab({
           ? 'تم استيراد شروحات الخدمات الأساسية.'
           : 'Fiches services de base importées.'
       );
+    } catch (err) {
+      setErrMsg(formatFirebaseError(err, lang));
     } finally {
       setSaving(false);
     }
@@ -395,20 +484,28 @@ export function AdminDashboardTab({
     req: ServiceRequestRecord,
     nextStatus: 'open' | 'in_progress' | 'closed'
   ) => {
-    const note = (
-      noteDrafts[req.id] !== undefined ? noteDrafts[req.id] : req.adminNote || ''
-    )
-      .trim()
-      .slice(0, 500);
-    const path = `requests/${req.id}`;
-    await updateDoc(doc(db, 'requests', req.id), {
-      status: nextStatus,
-      adminNote: note,
-      updatedAt: serverTimestamp(),
-    }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
-    setStatusMsg(
-      lang === 'ar' ? 'تم حفظ تحديث الطلب.' : 'Demande mise à jour.'
-    );
+    setErrMsg('');
+    setStatusMsg('');
+    try {
+      const note = (
+        noteDrafts[req.id] !== undefined
+          ? noteDrafts[req.id]
+          : req.adminNote || ''
+      )
+        .trim()
+        .slice(0, 500);
+      const path = `requests/${req.id}`;
+      await updateDoc(doc(db, 'requests', req.id), {
+        status: nextStatus,
+        adminNote: note,
+        updatedAt: serverTimestamp(),
+      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+      setStatusMsg(
+        lang === 'ar' ? 'تم حفظ تحديث الطلب.' : 'Demande mise à jour.'
+      );
+    } catch (err) {
+      setErrMsg(formatFirebaseError(err, lang));
+    }
   };
 
   return (
@@ -472,11 +569,11 @@ export function AdminDashboardTab({
 
       {section === 'skills' && (
         <>
-          {firestoreSkills.length === 0 && (
+          {missingBaselineSkills.length > 0 && (
             <div className="auth-gate">
               <p>
                 {lang === 'ar'
-                  ? 'يتم حالياً عرض القوالب التقنية للمهارات. استوردها لقاعدة البيانات لتتمكن من تعديلها وربطها بأعضاء فريقك الفعليين.'
+                  ? 'يتم حالياً عرض القوالب التقنية للمهارات. استورد القوالب لقاعدة البيانات لتتمكن من تعديلها وربطها بأعضاء فريقك الفعليين.'
                   : 'Les modèles techniques par défaut sont affichés. Importez-les dans Firestore pour les éditer et les lier aux membres.'}
               </p>
               <button
@@ -488,8 +585,8 @@ export function AdminDashboardTab({
                 <DownloadCloud size={15} />
                 <span>
                   {lang === 'ar'
-                    ? 'استيراد قوالب المهارات الأساسية (8 مهارات)'
-                    : 'Importer les modèles de compétences'}
+                    ? `استيراد قوالب المهارات (${missingBaselineSkills.length})`
+                    : `Importer les compétences (${missingBaselineSkills.length})`}
                 </span>
               </button>
             </div>
@@ -796,7 +893,7 @@ export function AdminDashboardTab({
                           setEditingSkillId(sk.id);
                           setSkNameAr(sk.nameAr);
                           setSkNameFr(sk.nameFr);
-                          setSkCat(sk.category);
+                          setSkCat(sanitizeServiceCategory(sk.category));
                           setSkLevel(sk.level);
                           setSkExpLabel(sk.experienceLabel || '');
                           setSkSummaryAr(sk.summaryAr);
@@ -829,7 +926,7 @@ export function AdminDashboardTab({
 
       {section === 'services' && (
         <>
-          {firestoreServices.length === 0 && (
+          {missingBaselineServices.length > 0 && (
             <div className="auth-gate">
               <p>
                 {lang === 'ar'
@@ -845,8 +942,8 @@ export function AdminDashboardTab({
                 <DownloadCloud size={15} />
                 <span>
                   {lang === 'ar'
-                    ? 'استيراد شروحات الخدمات الأساسية (5 تخصصات)'
-                    : 'Importer les services de base'}
+                    ? `استيراد شروحات الخدمات (${missingBaselineServices.length})`
+                    : `Importer les services (${missingBaselineServices.length})`}
                 </span>
               </button>
             </div>
@@ -1207,7 +1304,7 @@ export function AdminDashboardTab({
                         setEditingServiceId(srv.id);
                         setSrvTitleAr(srv.titleAr);
                         setSrvTitleFr(srv.titleFr);
-                        setSrvCat(srv.category);
+                        setSrvCat(sanitizeServiceCategory(srv.category));
                         setSrvDuration(srv.durationLabel);
                         setSrvNatureAr(srv.natureAr);
                         setSrvNatureFr(srv.natureFr);
@@ -1248,6 +1345,7 @@ export function AdminDashboardTab({
               ? `طلبات الزبائن الواردة (${requests.length})`
               : `Demandes clients reçues (${requests.length})`}
           </h3>
+          {errMsg && <p className="form-error">{errMsg}</p>}
           {statusMsg && <p className="form-success">{statusMsg}</p>}
           {requests.length === 0 ? (
             <p className="user-proj-meta">

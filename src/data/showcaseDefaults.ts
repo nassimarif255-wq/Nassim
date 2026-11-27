@@ -4,9 +4,8 @@ import beforeConstructionImg from '../assets/images/before_raw_construction_1795
 import afterFinishedImg from '../assets/images/after_finished_luxury_1795804095333.jpg';
 import exteriorFacadeImg from '../assets/images/exterior_facade_stone_1795804096106.jpg';
 import kitchenMarbleImg from '../assets/images/kitchen_marble_ceramic_1795804096407.jpg';
-import weldingCraftImg from '../assets/images/welding_metalwork_craft_1795808273381.jpg';
 import electricalMepImg from '../assets/images/electrical_mep_install_1795808274195.jpg';
-import type { ServiceCategoryId } from './i18n';
+import { SERVICE_CATEGORIES, type ServiceCategoryId } from './i18n';
 
 export type ProjectCategory =
   | ServiceCategoryId
@@ -133,7 +132,6 @@ export const GENERATED_ASSETS = {
   afterFinished: afterFinishedImg,
   exteriorFacade: exteriorFacadeImg,
   kitchenMarble: kitchenMarbleImg,
-  weldingCraft: weldingCraftImg,
   electricalMep: electricalMepImg,
 };
 
@@ -203,27 +201,6 @@ export const CURATED_SKILLS: TeamSkillRecord[] = [
     ownerId: 'template',
   },
   {
-    id: 'template-skill-welding',
-    nameAr: 'اللحام والحدادة الفنية والهياكل المعدنية',
-    nameFr: 'Soudure TIG/MIG & ferronnerie d’art',
-    category: 'welding',
-    level: 'expert',
-    experienceLabel: 'ورشة وميدان',
-    summaryAr:
-      'تصنيع ولحام وتركيب البوابات الحديدية، الدرابزين، السلالم المعدنية، والمظلات والهياكل الحديدية.',
-    summaryFr:
-      'Fabrication, soudage et pose de portails, garde-corps, escaliers métalliques et pergolas.',
-    toolsAr: 'ماكينات لحام MIG/TIG وArc، قاطع بلازما، صاروخ جلي، طلاء مضاد للصدأ',
-    toolsFr: 'Postes à souder MIG/TIG/Arc, découpeur plasma, peinture époxy',
-    tasksAr:
-      'تفصيل البوابات والأبواب الحديدية\nصناعة درابزين السلالم والشرفات\nتصميم ولحام السلالم والهياكل الداعمة\nمعالجة الصدأ والطلاء الواقي',
-    tasksFr:
-      'Portails et portes métalliques sur mesure\nGarde-corps d’escaliers et balcons\nEscaliers acier et structures porteuses\nTraitement anti-corrosion et finition',
-    artisanId: '',
-    sortOrder: 4,
-    ownerId: 'template',
-  },
-  {
     id: 'template-skill-electricity',
     nameAr: 'التأسيس الكهربائي واللوحات المحمية',
     nameFr: 'Électricité générale & tableaux',
@@ -255,7 +232,7 @@ export const CURATED_SKILLS: TeamSkillRecord[] = [
       'تمديدات المياه الساخنة والباردة بأنابيب Multicouche، التدفئة المركزية، والعزل المائي للحمامات.',
     summaryFr:
       'Réseaux PEX/multicouche sur collecteurs, chauffage central et étanchéité des pièces humides.',
-    toolsAr: 'مكبس هيدروليكي، مضخة اختبار الضغط، لحام PPR، أغشية عزل مائي',
+    toolsAr: 'مكبس هيدروليكي، مضخة اختبار الضغط، آلة توصيل أنابيب PPR بالصهر، أغشية عزل مائي',
     toolsFr: 'Pince à sertir électro-hydraulique, pompe d’épreuve, kit étanchéité',
     tasksAr:
       'تركيب مجمّعات التوزيع المستقلة\nتمديد شبكات التدفئة والغلايات\nتجهيز الحمامات والخلاطات الدفينة\nاختبار الضغط ومنع التسربات',
@@ -377,39 +354,6 @@ export const CURATED_SERVICES: TeamServiceGuideRecord[] = [
     ownerId: 'template',
   },
   {
-    id: 'template-service-welding',
-    titleAr: 'اللحام والحدادة الفنية والهياكل',
-    titleFr: 'Soudure, Ferronnerie & Structures Acier',
-    category: 'welding',
-    natureAr:
-      'تصميم، تفصيل، لحام وتركيب المصنوعات الحديدية المعمارية والهياكل المعدنية للمنازل والفيلات والمحلات.',
-    natureFr:
-      'Conception, soudage et pose d’ouvrages métalliques sur mesure pour l’habitat et le bâtiment.',
-    deliverablesAr:
-      'تصنيع وتركيب البوابات والأبواب الحديدية\nدرابزين السلالم والشرفات بتصاميم عصرية\nالسلالم المعدنية والهياكل الداعمة والمظلات\nمعالجة الصدأ والطلاء الواقي',
-    deliverablesFr:
-      'Portails et portes métalliques sécurisées\nGarde-corps d’escaliers et balcons\nEscaliers acier, pergolas et auvents\nTraitement antirouille et peinture de finition',
-    stagesAr:
-      'أخذ القياسات وتحديد سمك ونوع المقاطع الحديدية\nالقص واللحام داخل الورشة بدقة\nالصنفرة وتنظيف نقاط اللحام والطلاء التأسيسي\nالتركيب والتثبيت الميداني وضبط التوازن والغلق',
-    stagesFr:
-      'Prise de cotes et choix des profilés\nDécoupe et soudage TIG/MIG en atelier\nMeulage, dégraissage et couche antirouille\nPose sur site, scellement et réglages',
-    materialsToolsAr:
-      'مقاطع حديد مجلفن أو أسود بسماكات مدروسة، أسلاك لحام TIG/MIG، دهانات أساس ضد الصدأ، ومثبتات فولاذية ثقيلة.',
-    materialsToolsFr:
-      'Profilés acier dimensionnés, consommables TIG/MIG, primaire anti-corrosion, ancrages mécaniques.',
-    qualityStandardsAr:
-      'لحام مستمر ومتجانس، جلي نظيف للحواف الحادة، حماية ضد الصدأ قبل الطلاء النهائي، واختبار الثبات والحمولة.',
-    qualityStandardsFr:
-      'Soudures continues et meulées, protection anti-corrosion complète et test de rigidité après ancrage.',
-    outcomeAr:
-      'تجهيزات حديدية صلبة وآمنة متناسقة مع الطراز المعماري مع حماية طويلة الأمد من الصدأ.',
-    outcomeFr:
-      'Ouvrages métalliques solides, soignés et protégés durablement contre la corrosion.',
-    durationLabel: 'تُحدد حسب التفصيل والمقاسات',
-    sortOrder: 3,
-    ownerId: 'template',
-  },
-  {
     id: 'template-service-electricity',
     titleAr: 'الكهرباء المعمارية والأنظمة المحمية',
     titleFr: 'Électricité Générale & Éclairage',
@@ -479,3 +423,79 @@ export const CURATED_SERVICES: TeamServiceGuideRecord[] = [
 
 export const CURATED_TEAM_MEMBERS: ArtisanRecord[] = [];
 export const CURATED_PROJECTS: ProjectRecord[] = [];
+
+const VALID_SERVICE_SET = new Set<string>(SERVICE_CATEGORIES.map((c) => c.id));
+const LEGACY_PROJECT_SET = new Set<string>([
+  'construction',
+  'renovation',
+  'kitchen_bath',
+  'facades',
+]);
+
+export function isValidServiceCategory(cat: unknown): cat is ServiceCategoryId {
+  return typeof cat === 'string' && VALID_SERVICE_SET.has(cat);
+}
+
+export function isValidProjectCategory(cat: unknown): cat is ProjectCategory {
+  return (
+    typeof cat === 'string' &&
+    (VALID_SERVICE_SET.has(cat) || LEGACY_PROJECT_SET.has(cat))
+  );
+}
+
+export function sanitizeServiceCategory(
+  cat: unknown,
+  fallback: ServiceCategoryId = 'ceramics'
+): ServiceCategoryId {
+  return isValidServiceCategory(cat) ? cat : fallback;
+}
+
+export function mergeCatalogWithDefaults<
+  T extends { id: string; category: string; sortOrder: number },
+>(firestoreItems: T[], defaultItems: T[]): T[] {
+  const validFirestore = firestoreItems.filter((item) =>
+    isValidServiceCategory(item.category)
+  );
+  const byId = new Map<string, T>();
+  for (const item of validFirestore) {
+    byId.set(item.id, item);
+  }
+
+  const merged: T[] = [];
+  for (const def of defaultItems) {
+    if (!isValidServiceCategory(def.category)) continue;
+    const override = byId.get(def.id);
+    if (override) {
+      merged.push(override);
+      byId.delete(def.id);
+    } else {
+      merged.push(def);
+    }
+  }
+
+  for (const customItem of byId.values()) {
+    merged.push(customItem);
+  }
+
+  return merged.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+export function sanitizeProjectsList(items: ProjectRecord[]): ProjectRecord[] {
+  return items.filter(
+    (p) =>
+      p &&
+      typeof p.id === 'string' &&
+      !p.id.startsWith('curated-') &&
+      isValidProjectCategory(p.category)
+  );
+}
+
+export function sanitizeArtisansList(items: ArtisanRecord[]): ArtisanRecord[] {
+  return items.filter(
+    (a) =>
+      a &&
+      typeof a.id === 'string' &&
+      !a.id.startsWith('curated-') &&
+      isValidServiceCategory(a.profession)
+  );
+}

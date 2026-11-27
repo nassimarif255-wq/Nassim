@@ -12,7 +12,12 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { MessageSquare, Save, Trash2, Upload, X } from 'lucide-react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import {
+  db,
+  formatFirebaseError,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase';
 import {
   ProjectPhotoItem,
   ServiceRequestRecord,
@@ -54,7 +59,7 @@ export function RequestDetailModal({
   }, [request?.id, request?.adminNote]);
 
   useEffect(() => {
-    if (!request) {
+    if (!request || !user || !user.emailVerified) {
       setPhotos([]);
       return;
     }
@@ -81,7 +86,7 @@ export function RequestDetailModal({
     );
 
     return () => unsub();
-  }, [request]);
+  }, [request, user]);
 
   useEffect(() => {
     if (!request) return;
@@ -114,24 +119,34 @@ export function RequestDetailModal({
     nextStatus: 'open' | 'in_progress' | 'closed'
   ) => {
     if (!isAdmin) return;
-    const path = `requests/${request.id}`;
-    await updateDoc(doc(db, 'requests', request.id), {
-      status: nextStatus,
-      adminNote: adminNote.trim().slice(0, 500),
-      updatedAt: serverTimestamp(),
-    }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
-    setNoteSaved(true);
+    setPhotoError('');
+    try {
+      const path = `requests/${request.id}`;
+      await updateDoc(doc(db, 'requests', request.id), {
+        status: nextStatus,
+        adminNote: adminNote.trim().slice(0, 500),
+        updatedAt: serverTimestamp(),
+      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+      setNoteSaved(true);
+    } catch (err) {
+      setPhotoError(formatFirebaseError(err, lang));
+    }
   };
 
   const handleSaveNote = async () => {
     if (!isAdmin) return;
-    const path = `requests/${request.id}`;
-    await updateDoc(doc(db, 'requests', request.id), {
-      status: request.status,
-      adminNote: adminNote.trim().slice(0, 500),
-      updatedAt: serverTimestamp(),
-    }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
-    setNoteSaved(true);
+    setPhotoError('');
+    try {
+      const path = `requests/${request.id}`;
+      await updateDoc(doc(db, 'requests', request.id), {
+        status: request.status,
+        adminNote: adminNote.trim().slice(0, 500),
+        updatedAt: serverTimestamp(),
+      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+      setNoteSaved(true);
+    } catch (err) {
+      setPhotoError(formatFirebaseError(err, lang));
+    }
   };
 
   const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -156,20 +171,23 @@ export function RequestDetailModal({
         handleFirestoreError(err, OperationType.CREATE, path)
       );
     } catch (err) {
-      setPhotoError(
-        err instanceof Error ? err.message : 'تعذر رفع الصورة.'
-      );
+      setPhotoError(formatFirebaseError(err, lang));
     } finally {
       setUploading(false);
     }
   };
 
   const handleDeletePhoto = async (photoId: string) => {
-    const path = `requests/${request.id}/photos/${photoId}`;
-    await deleteDoc(doc(db, 'requests', request.id, 'photos', photoId)).catch(
-      (err) => handleFirestoreError(err, OperationType.DELETE, path)
-    );
-    setActiveIdx(0);
+    setPhotoError('');
+    try {
+      const path = `requests/${request.id}/photos/${photoId}`;
+      await deleteDoc(doc(db, 'requests', request.id, 'photos', photoId)).catch(
+        (err) => handleFirestoreError(err, OperationType.DELETE, path)
+      );
+      setActiveIdx(0);
+    } catch (err) {
+      setPhotoError(formatFirebaseError(err, lang));
+    }
   };
 
   const statusLabel =

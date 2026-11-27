@@ -23,7 +23,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Droplets,
-  Flame,
   Grid2x2,
   Hammer,
   LogIn,
@@ -54,8 +53,13 @@ import {
   CURATED_SERVICES,
   CURATED_SKILLS,
   GENERATED_ASSETS,
+  isValidProjectCategory,
+  isValidServiceCategory,
+  mergeCatalogWithDefaults,
   ProjectCategory,
   ProjectRecord,
+  sanitizeArtisansList,
+  sanitizeProjectsList,
   ServiceRequestRecord,
   SkillLevelId,
   TeamServiceGuideRecord,
@@ -88,7 +92,6 @@ export const ADMIN_EMAIL = 'nassimarif255@gmail.com';
 const CATEGORY_ICONS: Record<ServiceCategoryId, typeof Hammer> = {
   construction_renovation: Hammer,
   ceramics: Grid2x2,
-  welding: Flame,
   electricity: Zap,
   plumbing: Droplets,
   carpentry: Wrench,
@@ -170,23 +173,35 @@ export default function App() {
   const [filterCommune, setFilterCommune] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Firestore Public Catalog Collections (with offline localStorage cache fallback)
+  // Firestore Public Catalog Collections (with sanitized offline localStorage cache fallback)
   const [firestoreProjects, setFirestoreProjects] = useState<ProjectRecord[]>(
-    () => readCachedList<ProjectRecord>('dzdarkom_cache_projects')
+    () =>
+      sanitizeProjectsList(
+        readCachedList<ProjectRecord>('dzdarkom_cache_projects')
+      )
   );
   const [projectsLoading, setProjectsLoading] = useState(true);
 
   const [artisans, setArtisans] = useState<ArtisanRecord[]>(() =>
-    readCachedList<ArtisanRecord>('dzdarkom_cache_artisans')
+    sanitizeArtisansList(
+      readCachedList<ArtisanRecord>('dzdarkom_cache_artisans')
+    )
   );
   const [artisansLoading, setArtisansLoading] = useState(true);
 
   const [firestoreSkills, setFirestoreSkills] = useState<TeamSkillRecord[]>(
-    () => readCachedList<TeamSkillRecord>('dzdarkom_cache_skills')
+    () =>
+      readCachedList<TeamSkillRecord>('dzdarkom_cache_skills').filter((item) =>
+        isValidServiceCategory(item?.category)
+      )
   );
   const [firestoreServices, setFirestoreServices] = useState<
     TeamServiceGuideRecord[]
-  >(() => readCachedList<TeamServiceGuideRecord>('dzdarkom_cache_services'));
+  >(() =>
+    readCachedList<TeamServiceGuideRecord>('dzdarkom_cache_services').filter(
+      (item) => isValidServiceCategory(item?.category)
+    )
+  );
 
   // Auth & Private Customer Requests (never stored unauthenticated in public cache)
   const [user, setUser] = useState<User | null>(null);
@@ -259,28 +274,31 @@ export default function App() {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const list: ProjectRecord[] = snapshot.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            title: String(data.title || ''),
-            category: (data.category as ProjectCategory) || 'ceramics',
-            location: String(data.location || ''),
-            areaSqm: String(data.areaSqm || ''),
-            description: String(data.description || ''),
-            coverImage: String(data.coverImage || ''),
-            beforeImage: data.beforeImage ? String(data.beforeImage) : '',
-            completedServices: Array.isArray(data.completedServices)
-              ? data.completedServices.map(String)
-              : [],
-            specialties: Array.isArray(data.specialties)
-              ? data.specialties.map(String)
-              : [],
-            artisanId: data.artisanId ? String(data.artisanId) : '',
-            ownerId: String(data.ownerId || ''),
-            ownerName: String(data.ownerName || 'فريق اخدم دارك'),
-          };
-        });
+        const rawList: ProjectRecord[] = snapshot.docs
+          .filter((d) => isValidProjectCategory(d.data().category))
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              title: String(data.title || ''),
+              category: data.category as ProjectCategory,
+              location: String(data.location || ''),
+              areaSqm: String(data.areaSqm || ''),
+              description: String(data.description || ''),
+              coverImage: String(data.coverImage || ''),
+              beforeImage: data.beforeImage ? String(data.beforeImage) : '',
+              completedServices: Array.isArray(data.completedServices)
+                ? data.completedServices.map(String)
+                : [],
+              specialties: Array.isArray(data.specialties)
+                ? data.specialties.map(String)
+                : [],
+              artisanId: data.artisanId ? String(data.artisanId) : '',
+              ownerId: String(data.ownerId || ''),
+              ownerName: String(data.ownerName || 'فريق اخدم دارك'),
+            };
+          });
+        const list = sanitizeProjectsList(rawList);
         setFirestoreProjects(list);
         writeCachedList('dzdarkom_cache_projects', list);
         setProjectsLoading(false);
@@ -302,28 +320,30 @@ export default function App() {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const list: ArtisanRecord[] = snapshot.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            displayName: String(data.displayName || ''),
-            roleTitle: data.roleTitle ? String(data.roleTitle) : '',
-            profession:
-              (data.profession as ServiceCategoryId) || 'construction_renovation',
-            experienceYears: Number(data.experienceYears || 0),
-            wilaya: String(data.wilaya || ''),
-            commune: String(data.commune || ''),
-            bio: String(data.bio || ''),
-            skillsList: Array.isArray(data.skillsList)
-              ? data.skillsList.map(String)
-              : [],
-            toolsList: Array.isArray(data.toolsList)
-              ? data.toolsList.map(String)
-              : [],
-            avatarUrl: String(data.avatarUrl || ''),
-            ownerId: String(data.ownerId || ''),
-          };
-        });
+        const rawList: ArtisanRecord[] = snapshot.docs
+          .filter((d) => isValidServiceCategory(d.data().profession))
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              displayName: String(data.displayName || ''),
+              roleTitle: data.roleTitle ? String(data.roleTitle) : '',
+              profession: data.profession as ServiceCategoryId,
+              experienceYears: Number(data.experienceYears || 0),
+              wilaya: String(data.wilaya || ''),
+              commune: String(data.commune || ''),
+              bio: String(data.bio || ''),
+              skillsList: Array.isArray(data.skillsList)
+                ? data.skillsList.map(String)
+                : [],
+              toolsList: Array.isArray(data.toolsList)
+                ? data.toolsList.map(String)
+                : [],
+              avatarUrl: String(data.avatarUrl || ''),
+              ownerId: String(data.ownerId || ''),
+            };
+          });
+        const list = sanitizeArtisansList(rawList);
         setArtisans(list);
         writeCachedList('dzdarkom_cache_artisans', list);
         setArtisansLoading(false);
@@ -395,28 +415,30 @@ export default function App() {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const list: TeamSkillRecord[] = snapshot.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            nameAr: String(data.nameAr || ''),
-            nameFr: String(data.nameFr || data.nameAr || ''),
-            category: (data.category as ServiceCategoryId) || 'ceramics',
-            level: (data.level as SkillLevelId) || 'expert',
-            experienceLabel: data.experienceLabel
-              ? String(data.experienceLabel)
-              : '',
-            summaryAr: String(data.summaryAr || ''),
-            summaryFr: String(data.summaryFr || data.summaryAr || ''),
-            toolsAr: String(data.toolsAr || ''),
-            toolsFr: String(data.toolsFr || data.toolsAr || ''),
-            tasksAr: data.tasksAr ? String(data.tasksAr) : '',
-            tasksFr: data.tasksFr ? String(data.tasksFr) : '',
-            artisanId: data.artisanId ? String(data.artisanId) : '',
-            sortOrder: Number(data.sortOrder || 0),
-            ownerId: String(data.ownerId || ''),
-          };
-        });
+        const list: TeamSkillRecord[] = snapshot.docs
+          .filter((d) => isValidServiceCategory(d.data().category))
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              nameAr: String(data.nameAr || ''),
+              nameFr: String(data.nameFr || data.nameAr || ''),
+              category: data.category as ServiceCategoryId,
+              level: (data.level as SkillLevelId) || 'expert',
+              experienceLabel: data.experienceLabel
+                ? String(data.experienceLabel)
+                : '',
+              summaryAr: String(data.summaryAr || ''),
+              summaryFr: String(data.summaryFr || data.summaryAr || ''),
+              toolsAr: String(data.toolsAr || ''),
+              toolsFr: String(data.toolsFr || data.toolsAr || ''),
+              tasksAr: data.tasksAr ? String(data.tasksAr) : '',
+              tasksFr: data.tasksFr ? String(data.tasksFr) : '',
+              artisanId: data.artisanId ? String(data.artisanId) : '',
+              sortOrder: Number(data.sortOrder || 0),
+              ownerId: String(data.ownerId || ''),
+            };
+          });
         setFirestoreSkills(list);
         writeCachedList('dzdarkom_cache_skills', list);
       },
@@ -433,40 +455,42 @@ export default function App() {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const list: TeamServiceGuideRecord[] = snapshot.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            titleAr: String(data.titleAr || ''),
-            titleFr: String(data.titleFr || data.titleAr || ''),
-            category: (data.category as ServiceCategoryId) || 'ceramics',
-            natureAr: String(data.natureAr || ''),
-            natureFr: String(data.natureFr || data.natureAr || ''),
-            deliverablesAr: String(data.deliverablesAr || ''),
-            deliverablesFr: String(
-              data.deliverablesFr || data.deliverablesAr || ''
-            ),
-            stagesAr: String(data.stagesAr || ''),
-            stagesFr: String(data.stagesFr || data.stagesAr || ''),
-            materialsToolsAr: data.materialsToolsAr
-              ? String(data.materialsToolsAr)
-              : '',
-            materialsToolsFr: data.materialsToolsFr
-              ? String(data.materialsToolsFr)
-              : '',
-            qualityStandardsAr: data.qualityStandardsAr
-              ? String(data.qualityStandardsAr)
-              : '',
-            qualityStandardsFr: data.qualityStandardsFr
-              ? String(data.qualityStandardsFr)
-              : '',
-            outcomeAr: String(data.outcomeAr || ''),
-            outcomeFr: String(data.outcomeFr || data.outcomeAr || ''),
-            durationLabel: String(data.durationLabel || ''),
-            sortOrder: Number(data.sortOrder || 0),
-            ownerId: String(data.ownerId || ''),
-          };
-        });
+        const list: TeamServiceGuideRecord[] = snapshot.docs
+          .filter((d) => isValidServiceCategory(d.data().category))
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              titleAr: String(data.titleAr || ''),
+              titleFr: String(data.titleFr || data.titleAr || ''),
+              category: data.category as ServiceCategoryId,
+              natureAr: String(data.natureAr || ''),
+              natureFr: String(data.natureFr || data.natureAr || ''),
+              deliverablesAr: String(data.deliverablesAr || ''),
+              deliverablesFr: String(
+                data.deliverablesFr || data.deliverablesAr || ''
+              ),
+              stagesAr: String(data.stagesAr || ''),
+              stagesFr: String(data.stagesFr || data.stagesAr || ''),
+              materialsToolsAr: data.materialsToolsAr
+                ? String(data.materialsToolsAr)
+                : '',
+              materialsToolsFr: data.materialsToolsFr
+                ? String(data.materialsToolsFr)
+                : '',
+              qualityStandardsAr: data.qualityStandardsAr
+                ? String(data.qualityStandardsAr)
+                : '',
+              qualityStandardsFr: data.qualityStandardsFr
+                ? String(data.qualityStandardsFr)
+                : '',
+              outcomeAr: String(data.outcomeAr || ''),
+              outcomeFr: String(data.outcomeFr || data.outcomeAr || ''),
+              durationLabel: String(data.durationLabel || ''),
+              sortOrder: Number(data.sortOrder || 0),
+              ownerId: String(data.ownerId || ''),
+            };
+          });
         setFirestoreServices(list);
         writeCachedList('dzdarkom_cache_services', list);
       },
@@ -582,13 +606,12 @@ export default function App() {
   }, []);
 
   const displayedSkills = useMemo(
-    () => (firestoreSkills.length > 0 ? firestoreSkills : CURATED_SKILLS),
+    () => mergeCatalogWithDefaults(firestoreSkills, CURATED_SKILLS),
     [firestoreSkills]
   );
 
   const displayedServices = useMemo(
-    () =>
-      firestoreServices.length > 0 ? firestoreServices : CURATED_SERVICES,
+    () => mergeCatalogWithDefaults(firestoreServices, CURATED_SERVICES),
     [firestoreServices]
   );
 
@@ -757,14 +780,14 @@ export default function App() {
         alt: 'Travertine porcelain salon renovation',
       },
       {
-        id: 'welding',
-        label: lang === 'ar' ? 'لحام وحدادة' : 'Soudure & Acier',
+        id: 'electricity',
+        label: lang === 'ar' ? 'كهرباء وإنارة' : 'Électricité & LED',
         title:
           lang === 'ar'
-            ? 'سلالم وهياكل معدنية مصممة في الورشة'
-            : 'Escaliers et ferronnerie d’atelier',
-        src: GENERATED_ASSETS.weldingCraft,
-        alt: 'Architectural metalwork and TIG welding craft',
+            ? 'التأسيس الكهربائي واللوحات المحمية'
+            : 'Électricité générale et tableaux',
+        src: GENERATED_ASSETS.electricalMep,
+        alt: 'Residential electrical panel and MEP installation',
       },
       {
         id: 'facade',
@@ -874,85 +897,105 @@ export default function App() {
   };
 
   const handleSignIn = async () => {
-    await signInWithPopup(auth, googleProvider);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error('Auth popup error:', err);
+    }
   };
 
   const handleSignOut = async () => {
-    await signOut(auth);
-    setEditingProject(null);
-    setEditingArtisan(null);
-    setRequests([]);
+    try {
+      await signOut(auth);
+      setEditingProject(null);
+      setEditingArtisan(null);
+      setRequests([]);
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
   };
 
   const handleDeleteProject = async (project: ProjectRecord) => {
     if (!user || !isAdmin) return;
-    const projectPath = `projects/${project.id}`;
-    const photosSnap = await getDocs(
-      collection(db, 'projects', project.id, 'photos')
-    );
-    for (const photoDoc of photosSnap.docs) {
-      await deleteDoc(
-        doc(db, 'projects', project.id, 'photos', photoDoc.id)
-      ).catch((err) =>
-        handleFirestoreError(
-          err,
-          OperationType.DELETE,
-          `projects/${project.id}/photos/${photoDoc.id}`
-        )
+    try {
+      const projectPath = `projects/${project.id}`;
+      const photosSnap = await getDocs(
+        collection(db, 'projects', project.id, 'photos')
       );
+      for (const photoDoc of photosSnap.docs) {
+        await deleteDoc(
+          doc(db, 'projects', project.id, 'photos', photoDoc.id)
+        ).catch((err) =>
+          handleFirestoreError(
+            err,
+            OperationType.DELETE,
+            `projects/${project.id}/photos/${photoDoc.id}`
+          )
+        );
+      }
+      await deleteDoc(doc(db, 'projects', project.id)).catch((err) =>
+        handleFirestoreError(err, OperationType.DELETE, projectPath)
+      );
+      if (selectedProject?.id === project.id) setSelectedProject(null);
+      if (editingProject?.id === project.id) setEditingProject(null);
+    } catch (err) {
+      console.error('Delete project failed:', err);
     }
-    await deleteDoc(doc(db, 'projects', project.id)).catch((err) =>
-      handleFirestoreError(err, OperationType.DELETE, projectPath)
-    );
-    if (selectedProject?.id === project.id) setSelectedProject(null);
-    if (editingProject?.id === project.id) setEditingProject(null);
   };
 
   const handleDeleteArtisan = async (artisan: ArtisanRecord) => {
     if (!user || !isAdmin) return;
-    const artPath = `artisans/${artisan.id}`;
-    const photosSnap = await getDocs(
-      collection(db, 'artisans', artisan.id, 'photos')
-    );
-    for (const photoDoc of photosSnap.docs) {
-      await deleteDoc(
-        doc(db, 'artisans', artisan.id, 'photos', photoDoc.id)
-      ).catch((err) =>
-        handleFirestoreError(
-          err,
-          OperationType.DELETE,
-          `artisans/${artisan.id}/photos/${photoDoc.id}`
-        )
+    try {
+      const artPath = `artisans/${artisan.id}`;
+      const photosSnap = await getDocs(
+        collection(db, 'artisans', artisan.id, 'photos')
       );
+      for (const photoDoc of photosSnap.docs) {
+        await deleteDoc(
+          doc(db, 'artisans', artisan.id, 'photos', photoDoc.id)
+        ).catch((err) =>
+          handleFirestoreError(
+            err,
+            OperationType.DELETE,
+            `artisans/${artisan.id}/photos/${photoDoc.id}`
+          )
+        );
+      }
+      await deleteDoc(doc(db, 'artisans', artisan.id)).catch((err) =>
+        handleFirestoreError(err, OperationType.DELETE, artPath)
+      );
+      if (selectedArtisan?.id === artisan.id) setSelectedArtisan(null);
+      if (editingArtisan?.id === artisan.id) setEditingArtisan(null);
+    } catch (err) {
+      console.error('Delete artisan failed:', err);
     }
-    await deleteDoc(doc(db, 'artisans', artisan.id)).catch((err) =>
-      handleFirestoreError(err, OperationType.DELETE, artPath)
-    );
-    if (selectedArtisan?.id === artisan.id) setSelectedArtisan(null);
-    if (editingArtisan?.id === artisan.id) setEditingArtisan(null);
   };
 
   const handleDeleteRequest = async (req: ServiceRequestRecord) => {
     if (!user || (!isAdmin && req.ownerId !== user.uid)) return;
-    const reqPath = `requests/${req.id}`;
-    const photosSnap = await getDocs(
-      collection(db, 'requests', req.id, 'photos')
-    );
-    for (const photoDoc of photosSnap.docs) {
-      await deleteDoc(
-        doc(db, 'requests', req.id, 'photos', photoDoc.id)
-      ).catch((err) =>
-        handleFirestoreError(
-          err,
-          OperationType.DELETE,
-          `requests/${req.id}/photos/${photoDoc.id}`
-        )
+    try {
+      const reqPath = `requests/${req.id}`;
+      const photosSnap = await getDocs(
+        collection(db, 'requests', req.id, 'photos')
       );
+      for (const photoDoc of photosSnap.docs) {
+        await deleteDoc(
+          doc(db, 'requests', req.id, 'photos', photoDoc.id)
+        ).catch((err) =>
+          handleFirestoreError(
+            err,
+            OperationType.DELETE,
+            `requests/${req.id}/photos/${photoDoc.id}`
+          )
+        );
+      }
+      await deleteDoc(doc(db, 'requests', req.id)).catch((err) =>
+        handleFirestoreError(err, OperationType.DELETE, reqPath)
+      );
+      if (selectedRequest?.id === req.id) setSelectedRequest(null);
+    } catch (err) {
+      console.error('Delete request failed:', err);
     }
-    await deleteDoc(doc(db, 'requests', req.id)).catch((err) =>
-      handleFirestoreError(err, OperationType.DELETE, reqPath)
-    );
-    if (selectedRequest?.id === req.id) setSelectedRequest(null);
   };
 
   const activeSpot = heroSpotlights[heroSpotIdx];

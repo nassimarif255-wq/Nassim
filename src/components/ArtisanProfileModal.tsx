@@ -11,7 +11,12 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import { MessageSquare, Pencil, Trash2, Upload, X } from 'lucide-react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import {
+  db,
+  formatFirebaseError,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase';
 import {
   ArtisanRecord,
   ProjectPhotoItem,
@@ -120,9 +125,7 @@ export function ArtisanProfileModal({
       );
       setCaption('');
     } catch (err) {
-      setPhotoError(
-        err instanceof Error ? err.message : 'تعذر رفع الصورة.'
-      );
+      setPhotoError(formatFirebaseError(err, lang));
     } finally {
       setUploading(false);
     }
@@ -130,10 +133,15 @@ export function ArtisanProfileModal({
 
   const handleDeletePhoto = async (photoId: string) => {
     if (!canManage) return;
-    const path = `artisans/${artisan.id}/photos/${photoId}`;
-    await deleteDoc(doc(db, 'artisans', artisan.id, 'photos', photoId)).catch(
-      (err) => handleFirestoreError(err, OperationType.DELETE, path)
-    );
+    setPhotoError('');
+    try {
+      const path = `artisans/${artisan.id}/photos/${photoId}`;
+      await deleteDoc(doc(db, 'artisans', artisan.id, 'photos', photoId)).catch(
+        (err) => handleFirestoreError(err, OperationType.DELETE, path)
+      );
+    } catch (err) {
+      setPhotoError(formatFirebaseError(err, lang));
+    }
   };
 
   return (

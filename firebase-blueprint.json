@@ -2,7 +2,7 @@
   "entities": {
     "Project": {
       "title": "Project",
-      "description": "A real completed construction, ceramics, welding, or home renovation project published by the dz darkom pro admin with optional before/after comparison.",
+      "description": "A real completed construction, ceramics, or home renovation project published by the dz darkom pro admin with optional before/after comparison.",
       "type": "object",
       "properties": {
         "title": { "type": "string", "minLength": 3, "maxLength": 120 },
@@ -11,7 +11,6 @@
           "enum": [
             "construction_renovation",
             "ceramics",
-            "welding",
             "electricity",
             "plumbing",
             "carpentry",
@@ -63,7 +62,6 @@
           "enum": [
             "construction_renovation",
             "ceramics",
-            "welding",
             "electricity",
             "plumbing",
             "carpentry",
@@ -97,7 +95,6 @@
           "enum": [
             "construction_renovation",
             "ceramics",
-            "welding",
             "electricity",
             "plumbing",
             "carpentry",
@@ -134,7 +131,6 @@
           "enum": [
             "construction_renovation",
             "ceramics",
-            "welding",
             "electricity",
             "plumbing",
             "carpentry",
@@ -174,7 +170,6 @@
           "enum": [
             "construction_renovation",
             "ceramics",
-            "welding",
             "electricity",
             "plumbing",
             "carpentry",
