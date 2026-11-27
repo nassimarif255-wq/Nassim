@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { X, Send, LogIn } from 'lucide-react';
+import { LogIn, Send, X } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import type { AppLang } from '../data/i18n';
 
 export interface ContactTarget {
   recipientOwnerId: string;
   recipientName: string;
-  contextType: 'artisan' | 'request';
+  contextType: 'team' | 'artisan' | 'request';
   contextId: string;
   contextTitle: string;
 }
@@ -134,14 +134,11 @@ export function ContactModal({
       aria-labelledby="contact-modal-title"
       onClick={onClose}
     >
-      <div
-        className="modal-card-sm"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="modal-card-sm" onClick={(e) => e.stopPropagation()}>
         <div className="lightbox-top">
           <h2 id="contact-modal-title" className="drawer-title">
             {lang === 'ar'
-              ? `تواصل مباشر مع ${target.recipientName}`
+              ? `مراسلة ${target.recipientName}`
               : `Contacter ${target.recipientName}`}
           </h2>
           <button
@@ -163,8 +160,8 @@ export function ContactModal({
             <div className="auth-gate">
               <p>
                 {lang === 'ar'
-                  ? 'لحماية خصوصية الزبائن والمهنيين، يرجى تسجيل الدخول بحساب Google لإرسال رسالة مباشرة.'
-                  : 'Pour protéger la confidentialité, connectez-vous avec Google pour envoyer un message direct.'}
+                  ? 'لحماية خصوصية الزبائن، يرجى تسجيل الدخول بحساب Google لإرسال رسالة مباشرة لفريقنا.'
+                  : 'Pour protéger votre confidentialité, connectez-vous avec Google pour écrire à notre équipe.'}
               </p>
               <button
                 type="button"
@@ -198,7 +195,7 @@ export function ContactModal({
             <form className="project-form" onSubmit={handleSubmit}>
               <div className="form-field">
                 <label className="form-label" htmlFor="inq-message">
-                  {lang === 'ar' ? 'نص الرسالة أو العرض' : 'Votre message ou proposition'}
+                  {lang === 'ar' ? 'نص الرسالة' : 'Votre message'}
                 </label>
                 <textarea
                   id="inq-message"
@@ -208,8 +205,8 @@ export function ContactModal({
                   required
                   placeholder={
                     lang === 'ar'
-                      ? 'اشرح تفاصيل العمل المطلوب، الموعد المقترح أو التسعير التقديري...'
-                      : 'Décrivez votre besoin, disponibilité ou proposition de devis...'
+                      ? 'اشرح تفاصيل العمل المطلوب، الموقع، أو استفسارك...'
+                      : 'Décrivez votre besoin, localisation ou question...'
                   }
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
@@ -219,8 +216,8 @@ export function ContactModal({
               <div className="form-field">
                 <label className="form-label" htmlFor="inq-phone">
                   {lang === 'ar'
-                    ? 'وسيلة تواصل إضافية (رقم هاتف / واتساب - يظهر للمستلم فقط)'
-                    : 'Téléphone / WhatsApp (visible uniquement par le destinataire)'}
+                    ? 'رقم الهاتف / واتساب (يظهر لإدارة الفريق فقط)'
+                    : 'Téléphone / WhatsApp (visible uniquement par notre équipe)'}
                 </label>
                 <input
                   id="inq-phone"

@@ -11,16 +11,17 @@ import {
   where,
 } from 'firebase/firestore';
 import {
-  X,
-  Upload,
+  ExternalLink,
+  ImagePlus,
   LogIn,
   LogOut,
-  Trash2,
   Pencil,
   Plus,
-  ImagePlus,
   Send,
   ShieldCheck,
+  Trash2,
+  Upload,
+  X,
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
@@ -28,16 +29,18 @@ import {
   InquiryRecord,
   ProjectCategory,
   ProjectRecord,
+  ServiceRequestRecord,
   TeamServiceGuideRecord,
   TeamSkillRecord,
 } from '../data/showcaseDefaults';
 import {
   AppLang,
+  getCategoryLabel,
   SERVICE_CATEGORIES,
   ServiceCategoryId,
 } from '../data/i18n';
 import { ALGERIA_WILAYAS } from '../data/algeriaLocations';
-import { compressImageFile } from '../utils/imageProcessor';
+import { MediaFolder, uploadMediaImage } from '../utils/mediaStorage';
 import { AdminDashboardTab } from './AdminDashboardTab';
 
 export type PortalTab = 'project' | 'artisan' | 'request' | 'messages' | 'admin';
@@ -54,9 +57,9 @@ interface ProjectManagerDrawerProps {
   userProjects: ProjectRecord[];
   userArtisans: ArtisanRecord[];
   allArtisans: ArtisanRecord[];
+  allRequests: ServiceRequestRecord[];
   firestoreSkills: TeamSkillRecord[];
   firestoreServices: TeamServiceGuideRecord[];
-  hasFirestoreArtisans: boolean;
   onClose: () => void;
   onSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
@@ -66,9 +69,11 @@ interface ProjectManagerDrawerProps {
   onDeleteProject: (project: ProjectRecord) => void;
   onEditArtisan: (artisan: ArtisanRecord) => void;
   onDeleteArtisan: (artisan: ArtisanRecord) => void;
+  onOpenRequestDetail: (req: ServiceRequestRecord) => void;
+  onDeleteRequest: (req: ServiceRequestRecord) => Promise<void>;
 }
 
-function parseTagInput(raw: string): string[] {
+export function parseTagInput(raw: string): string[] {
   return raw
     .split(/[\n,،]+/)
     .map((s) => s.trim().slice(0, 80))
@@ -88,9 +93,9 @@ export function ProjectManagerDrawer({
   userProjects,
   userArtisans,
   allArtisans,
+  allRequests,
   firestoreSkills,
   firestoreServices,
-  hasFirestoreArtisans,
   onClose,
   onSignIn,
   onSignOut,
@@ -100,10 +105,12 @@ export function ProjectManagerDrawer({
   onDeleteProject,
   onEditArtisan,
   onDeleteArtisan,
+  onOpenRequestDetail,
+  onDeleteRequest,
 }: ProjectManagerDrawerProps) {
   const [activeTab, setActiveTab] = useState<PortalTab>(initialTab);
 
-  // Project form state
+  // Project form state (Admin Only)
   const [projTitle, setProjTitle] = useState('');
   const [projCategory, setProjCategory] =
     useState<ProjectCategory>('ceramics');
@@ -113,13 +120,14 @@ export function ProjectManagerDrawer({
   const [projCover, setProjCover] = useState('');
   const [projBefore, setProjBefore] = useState('');
   const [projServicesRaw, setProjServicesRaw] = useState('');
+  const [projSpecialtiesRaw, setProjSpecialtiesRaw] = useState('');
   const [projArtisanId, setProjArtisanId] = useState('');
   const [projExtras, setProjExtras] = useState<
     { imageUrl: string; caption: string }[]
   >([]);
   const [urlInput, setUrlInput] = useState('');
 
-  // Artisan / Team member profile form state
+  // Artisan / Team member profile form state (Admin Only)
   const [artName, setArtName] = useState('');
   const [artRoleTitle, setArtRoleTitle] = useState('');
   const [artProf, setArtProf] = useState<ServiceCategoryId>('ceramics');
@@ -128,12 +136,13 @@ export function ProjectManagerDrawer({
   const [artCommune, setArtCommune] = useState('حيدرة');
   const [artBio, setArtBio] = useState('');
   const [artSkillsRaw, setArtSkillsRaw] = useState('');
+  const [artToolsRaw, setArtToolsRaw] = useState('');
   const [artAvatar, setArtAvatar] = useState('');
   const [artPhotos, setArtPhotos] = useState<
     { imageUrl: string; caption: string }[]
   >([]);
 
-  // Customer request form state
+  // Customer request form state (Verified Client / Admin)
   const [reqTitle, setReqTitle] = useState('');
   const [reqCategory, setReqCategory] =
     useState<ServiceCategoryId>('construction_renovation');
@@ -160,14 +169,19 @@ export function ProjectManagerDrawer({
 
   useEffect(() => {
     if (open) {
-      setActiveTab(initialTab);
+      const allowedTab: PortalTab = isAdmin
+        ? initialTab
+        : initialTab === 'messages'
+          ? 'messages'
+          : 'request';
+      setActiveTab(allowedTab);
       setErrorMsg('');
       setSuccessMsg('');
     }
-  }, [open, initialTab]);
+  }, [open, initialTab, isAdmin]);
 
   useEffect(() => {
-    if (editingProject) {
+    if (editingProject && isAdmin) {
       setActiveTab('project');
       setProjTitle(editingProject.title);
       setProjCategory(editingProject.category);
@@ -177,6 +191,7 @@ export function ProjectManagerDrawer({
       setProjCover(editingProject.coverImage);
       setProjBefore(editingProject.beforeImage || '');
       setProjServicesRaw((editingProject.completedServices || []).join('، '));
+      setProjSpecialtiesRaw((editingProject.specialties || []).join('، '));
       setProjArtisanId(editingProject.artisanId || '');
       setProjExtras([]);
       setErrorMsg('');
@@ -190,14 +205,15 @@ export function ProjectManagerDrawer({
       setProjCover('');
       setProjBefore('');
       setProjServicesRaw('');
+      setProjSpecialtiesRaw('');
       setProjArtisanId('');
       setProjExtras([]);
       setUrlInput('');
     }
-  }, [editingProject]);
+  }, [editingProject, isAdmin]);
 
   useEffect(() => {
-    if (editingArtisan) {
+    if (editingArtisan && isAdmin) {
       setActiveTab('artisan');
       setArtName(editingArtisan.displayName);
       setArtRoleTitle(editingArtisan.roleTitle || '');
@@ -207,12 +223,13 @@ export function ProjectManagerDrawer({
       setArtCommune(editingArtisan.commune);
       setArtBio(editingArtisan.bio);
       setArtSkillsRaw((editingArtisan.skillsList || []).join('، '));
+      setArtToolsRaw((editingArtisan.toolsList || []).join('، '));
       setArtAvatar(editingArtisan.avatarUrl);
       setArtPhotos([]);
       setErrorMsg('');
       setSuccessMsg('');
     } else {
-      setArtName(user?.displayName || '');
+      setArtName('');
       setArtRoleTitle('');
       setArtProf('ceramics');
       setArtExp('5');
@@ -220,10 +237,11 @@ export function ProjectManagerDrawer({
       setArtCommune('حيدرة');
       setArtBio('');
       setArtSkillsRaw('');
+      setArtToolsRaw('');
       setArtAvatar('');
       setArtPhotos([]);
     }
-  }, [editingArtisan, user?.displayName]);
+  }, [editingArtisan, isAdmin]);
 
   useEffect(() => {
     if (!open) return;
@@ -239,6 +257,40 @@ export function ProjectManagerDrawer({
       setIncomingInquiries([]);
       setSentInquiries([]);
       return;
+    }
+
+    if (isAdmin) {
+      const qAll = query(collection(db, 'inquiries'));
+      const unsubAll = onSnapshot(
+        qAll,
+        (snap) => {
+          const all: InquiryRecord[] = snap.docs.map((d) => {
+            const data = d.data();
+            const ts = data.createdAt?.toMillis ? data.createdAt.toMillis() : 0;
+            return {
+              id: d.id,
+              senderId: String(data.senderId || ''),
+              senderName: String(data.senderName || ''),
+              recipientOwnerId: String(data.recipientOwnerId || ''),
+              recipientName: String(data.recipientName || ''),
+              contextType:
+                (data.contextType as 'team' | 'artisan' | 'request') || 'team',
+              contextId: String(data.contextId || ''),
+              contextTitle: String(data.contextTitle || ''),
+              message: String(data.message || ''),
+              contactInfo: String(data.contactInfo || ''),
+              replyText: String(data.replyText || ''),
+              status: (data.status as 'pending' | 'replied') || 'pending',
+              createdAtMs: ts,
+            };
+          });
+          all.sort((a, b) => b.createdAtMs - a.createdAtMs);
+          setIncomingInquiries(all.filter((i) => i.senderId !== user.uid));
+          setSentInquiries(all.filter((i) => i.senderId === user.uid));
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'inquiries')
+      );
+      return () => unsubAll();
     }
 
     const qIn = query(
@@ -257,7 +309,8 @@ export function ProjectManagerDrawer({
             senderName: String(data.senderName || ''),
             recipientOwnerId: String(data.recipientOwnerId || ''),
             recipientName: String(data.recipientName || ''),
-            contextType: (data.contextType as 'artisan' | 'request') || 'artisan',
+            contextType:
+              (data.contextType as 'team' | 'artisan' | 'request') || 'team',
             contextId: String(data.contextId || ''),
             contextTitle: String(data.contextTitle || ''),
             message: String(data.message || ''),
@@ -289,7 +342,8 @@ export function ProjectManagerDrawer({
             senderName: String(data.senderName || ''),
             recipientOwnerId: String(data.recipientOwnerId || ''),
             recipientName: String(data.recipientName || ''),
-            contextType: (data.contextType as 'artisan' | 'request') || 'artisan',
+            contextType:
+              (data.contextType as 'team' | 'artisan' | 'request') || 'team',
             contextId: String(data.contextId || ''),
             contextTitle: String(data.contextTitle || ''),
             message: String(data.message || ''),
@@ -309,7 +363,7 @@ export function ProjectManagerDrawer({
       unsubIn();
       unsubSent();
     };
-  }, [user]);
+  }, [user, isAdmin]);
 
   const artCommunes = useMemo(() => {
     const w = ALGERIA_WILAYAS.find((item) => item.ar === artWilaya);
@@ -323,13 +377,15 @@ export function ProjectManagerDrawer({
 
   const processSingleFile = async (
     file: File,
+    folder: MediaFolder,
     onDone: (uri: string) => void
   ) => {
+    if (!user) return;
     setErrorMsg('');
     setProcessingImg(true);
     try {
-      const compressed = await compressImageFile(file);
-      onDone(compressed);
+      const uri = await uploadMediaImage(file, folder, user.uid);
+      onDone(uri);
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : 'تعذر معالجة الصورة.'
@@ -341,10 +397,12 @@ export function ProjectManagerDrawer({
 
   const processBatchFiles = async (
     files: File[],
+    folder: MediaFolder,
     currentCount: number,
     maxCount: number,
     onDone: (items: { imageUrl: string; caption: string }[]) => void
   ) => {
+    if (!user) return;
     const remaining = maxCount - currentCount;
     if (remaining <= 0) {
       setErrorMsg(
@@ -359,16 +417,16 @@ export function ProjectManagerDrawer({
     try {
       const processed: { imageUrl: string; caption: string }[] = [];
       for (const f of files.slice(0, remaining)) {
-        const compressed = await compressImageFile(f);
+        const uri = await uploadMediaImage(f, folder, user.uid);
         processed.push({
-          imageUrl: compressed,
+          imageUrl: uri,
           caption: f.name.replace(/\.[^/.]+$/, '').slice(0, 120),
         });
       }
       onDone(processed);
     } catch (err) {
       setErrorMsg(
-        err instanceof Error ? err.message : 'تعذر ضغط إحدى الصور.'
+        err instanceof Error ? err.message : 'تعذر رفع إحدى الصور.'
       );
     } finally {
       setProcessingImg(false);
@@ -377,13 +435,14 @@ export function ProjectManagerDrawer({
 
   const handleProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !user.emailVerified) return;
+    if (!user || !user.emailVerified || !isAdmin) return;
 
     const cleanTitle = projTitle.trim();
     const cleanLoc = projLocation.trim();
     const cleanArea = projArea.trim();
     const cleanDesc = projDesc.trim();
     const completedServices = parseTagInput(projServicesRaw);
+    const specialties = parseTagInput(projSpecialtiesRaw);
 
     if (
       cleanTitle.length < 3 ||
@@ -415,6 +474,7 @@ export function ProjectManagerDrawer({
           coverImage: projCover,
           beforeImage: projBefore,
           completedServices,
+          specialties,
           artisanId: projArtisanId,
           updatedAt: serverTimestamp(),
         }).catch((err) =>
@@ -440,6 +500,7 @@ export function ProjectManagerDrawer({
           coverImage: projCover,
           beforeImage: projBefore,
           completedServices,
+          specialties,
           artisanId: projArtisanId,
           ownerId: user.uid,
           ownerName: (user.displayName || 'فريق اخدم دارك').slice(0, 100),
@@ -472,12 +533,13 @@ export function ProjectManagerDrawer({
         setProjCover('');
         setProjBefore('');
         setProjServicesRaw('');
+        setProjSpecialtiesRaw('');
         setProjArtisanId('');
         setProjExtras([]);
         setSuccessMsg(
           lang === 'ar'
-            ? 'تم نشر العمل والصور في المعرض العام.'
-            : 'Réalisation publiée dans la galerie.'
+            ? 'تم نشر المشروع الحقيقي والصور في المعرض العام.'
+            : 'Projet réel publié dans la galerie.'
         );
       }
     } finally {
@@ -487,7 +549,7 @@ export function ProjectManagerDrawer({
 
   const handleArtisanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !user.emailVerified) return;
+    if (!user || !user.emailVerified || !isAdmin) return;
 
     const cleanName = artName.trim();
     const cleanWilaya = artWilaya.trim();
@@ -495,6 +557,7 @@ export function ProjectManagerDrawer({
     const cleanBio = artBio.trim();
     const expNum = Math.max(0, Math.min(80, Number(artExp) || 0));
     const skillsList = parseTagInput(artSkillsRaw);
+    const toolsList = parseTagInput(artToolsRaw);
 
     if (
       cleanName.length < 2 ||
@@ -525,6 +588,7 @@ export function ProjectManagerDrawer({
           commune: cleanCommune.slice(0, 60),
           bio: cleanBio.slice(0, 1200),
           skillsList,
+          toolsList,
           avatarUrl: artAvatar,
           updatedAt: serverTimestamp(),
         }).catch((err) =>
@@ -550,6 +614,7 @@ export function ProjectManagerDrawer({
           commune: cleanCommune.slice(0, 60),
           bio: cleanBio.slice(0, 1200),
           skillsList,
+          toolsList,
           avatarUrl: artAvatar,
           ownerId: user.uid,
           createdAt: serverTimestamp(),
@@ -574,9 +639,12 @@ export function ProjectManagerDrawer({
           );
         }
 
+        setArtName('');
         setArtBio('');
         setArtRoleTitle('');
         setArtSkillsRaw('');
+        setArtToolsRaw('');
+        setArtAvatar('');
         setArtPhotos([]);
         setSuccessMsg(
           lang === 'ar'
@@ -628,6 +696,7 @@ export function ProjectManagerDrawer({
         description: cleanDesc.slice(0, 1500),
         coverImage: reqCover,
         status: 'open',
+        adminNote: '',
         ownerId: user.uid,
         ownerName: (user.displayName || 'زبون').slice(0, 100),
         createdAt: serverTimestamp(),
@@ -658,7 +727,7 @@ export function ProjectManagerDrawer({
       setReqExtras([]);
       setSuccessMsg(
         lang === 'ar'
-          ? 'تم إرسال طلبك لفريقنا بنجاح.'
+          ? 'تم إرسال طلبك لفريقنا بنجاح وستتم مراجعته والرد عليك.'
           : 'Demande transmise à notre équipe.'
       );
     } finally {
@@ -700,8 +769,8 @@ export function ProjectManagerDrawer({
                   ? 'لوحة إدارة DZ Darkom Pro'
                   : 'Administration DZ Darkom Pro'
                 : lang === 'ar'
-                  ? 'بوابة الزبائن والفريق'
-                  : 'Espace Client & Équipe'}
+                  ? 'بوابة الزبائن والتواصل'
+                  : 'Espace Client & Contact'}
             </h2>
             <p className="drawer-subtitle">اخدم دارك dz darkom pro</p>
           </div>
@@ -728,13 +797,13 @@ export function ProjectManagerDrawer({
             <div className="auth-gate">
               <h3>
                 {lang === 'ar'
-                  ? 'تسجيل دخول المستخدم أو الإدارة'
-                  : 'Connexion Admin / Client'}
+                  ? 'تسجيل دخول الزبائن والإدارة'
+                  : 'Connexion Client / Admin'}
               </h3>
               <p>
                 {lang === 'ar'
-                  ? 'تصفح المهارات، شرح الخدمات، ملفات الفريق، ومعرض قبل وبعد متاح للجميع. سجّل الدخول لإرسال طلب معاينة لفريقنا أو إدارة محتوى الموقع (للمدير).'
-                  : 'La consultation est publique. Connectez-vous avec Google pour envoyer une demande ou gérer le site (Admin).'}
+                  ? 'تصفح المهارات، شرح الخدمات، ملفات الفريق، ومعرض قبل وبعد متاح للجميع. سجّل الدخول لإرسال طلب معاينة لفريقنا أو متابعة رسائلك (ولإدارة الموقع لحساب المدير).'
+                  : 'La consultation est publique. Connectez-vous avec Google pour envoyer une demande ou consulter vos messages (ou gérer le site pour l’Admin).'}
               </p>
               <button
                 type="button"
@@ -772,11 +841,11 @@ export function ProjectManagerDrawer({
                     <div className="user-meta">
                       {isAdmin
                         ? lang === 'ar'
-                          ? 'مدير الفريق'
-                          : 'Admin'
+                          ? 'مدير الفريق (صلاحية كاملة)'
+                          : 'Admin (accès complet)'
                         : lang === 'ar'
-                          ? 'حساب مفعل'
-                          : 'Compte vérifié'}{' '}
+                          ? 'حساب زبون مفعل'
+                          : 'Compte client vérifié'}{' '}
                       · {user.email}
                     </div>
                   </div>
@@ -792,57 +861,63 @@ export function ProjectManagerDrawer({
               </div>
 
               <div
-                className={`portal-tabs${isAdmin ? ' has-5' : ''}`}
+                className={`portal-tabs${isAdmin ? ' has-5' : ' has-2'}`}
                 role="tablist"
               >
                 {isAdmin && (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'admin'}
-                    className={`portal-tab${
-                      activeTab === 'admin' ? ' is-active' : ''
-                    }`}
-                    onClick={() => {
-                      setActiveTab('admin');
-                      setErrorMsg('');
-                      setSuccessMsg('');
-                    }}
-                  >
-                    <ShieldCheck size={13} style={{ display: 'inline', marginInlineEnd: 4 }} />
-                    {lang === 'ar' ? 'الإدارة' : 'Admin'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === 'admin'}
+                      className={`portal-tab${
+                        activeTab === 'admin' ? ' is-active' : ''
+                      }`}
+                      onClick={() => {
+                        setActiveTab('admin');
+                        setErrorMsg('');
+                        setSuccessMsg('');
+                      }}
+                    >
+                      <ShieldCheck
+                        size={13}
+                        style={{ display: 'inline', marginInlineEnd: 4 }}
+                      />
+                      {lang === 'ar' ? 'الإدارة' : 'Admin'}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === 'project'}
+                      className={`portal-tab${
+                        activeTab === 'project' ? ' is-active' : ''
+                      }`}
+                      onClick={() => {
+                        setActiveTab('project');
+                        setErrorMsg('');
+                        setSuccessMsg('');
+                      }}
+                    >
+                      {lang === 'ar' ? 'المشاريع' : 'Projets'}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === 'artisan'}
+                      className={`portal-tab${
+                        activeTab === 'artisan' ? ' is-active' : ''
+                      }`}
+                      onClick={() => {
+                        setActiveTab('artisan');
+                        setErrorMsg('');
+                        setSuccessMsg('');
+                      }}
+                    >
+                      {lang === 'ar' ? 'الفريق' : 'Équipe'}
+                    </button>
+                  </>
                 )}
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === 'project'}
-                  className={`portal-tab${
-                    activeTab === 'project' ? ' is-active' : ''
-                  }`}
-                  onClick={() => {
-                    setActiveTab('project');
-                    setErrorMsg('');
-                    setSuccessMsg('');
-                  }}
-                >
-                  {lang === 'ar' ? 'المشاريع' : 'Projets'}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === 'artisan'}
-                  className={`portal-tab${
-                    activeTab === 'artisan' ? ' is-active' : ''
-                  }`}
-                  onClick={() => {
-                    setActiveTab('artisan');
-                    setErrorMsg('');
-                    setSuccessMsg('');
-                  }}
-                >
-                  {lang === 'ar' ? 'الفريق' : 'Équipe'}
-                </button>
+
                 <button
                   type="button"
                   role="tab"
@@ -883,13 +958,16 @@ export function ProjectManagerDrawer({
                   lang={lang}
                   firestoreSkills={firestoreSkills}
                   firestoreServices={firestoreServices}
-                  hasFirestoreArtisans={hasFirestoreArtisans}
+                  artisans={allArtisans}
+                  requests={allRequests}
                   onGoToArtisansTab={() => setActiveTab('artisan')}
                   onGoToProjectsTab={() => setActiveTab('project')}
+                  onOpenRequestDetail={onOpenRequestDetail}
+                  onDeleteRequest={onDeleteRequest}
                 />
               )}
 
-              {activeTab === 'project' && (
+              {activeTab === 'project' && isAdmin && (
                 <>
                   <form className="project-form" onSubmit={handleProjectSubmit}>
                     <div className="form-header-row">
@@ -899,8 +977,8 @@ export function ProjectManagerDrawer({
                             ? 'تعديل المشروع'
                             : 'Modifier le projet'
                           : lang === 'ar'
-                            ? 'إضافة مشروع وصور قبل/بعد'
-                            : 'Ajouter un projet Avant/Après'}
+                            ? 'إضافة مشروع حقيقي وصور قبل/بعد'
+                            : 'Ajouter un chantier réel Avant/Après'}
                       </h3>
                       {editingProject && (
                         <button
@@ -931,7 +1009,7 @@ export function ProjectManagerDrawer({
                     <div className="form-row-2">
                       <div className="form-field">
                         <label className="form-label" htmlFor="proj-cat">
-                          {lang === 'ar' ? 'التخصص' : 'Spécialité'}
+                          {lang === 'ar' ? 'التخصص الرئيسي' : 'Spécialité'}
                         </label>
                         <select
                           id="proj-cat"
@@ -998,23 +1076,43 @@ export function ProjectManagerDrawer({
                           onChange={(e) => setProjArtisanId(e.target.value)}
                         >
                           <option value="">
-                            {lang === 'ar' ? 'فريق اخدم دارك' : 'Équipe DZ Darkom'}
+                            {lang === 'ar'
+                              ? 'فريق اخدم دارك'
+                              : 'Équipe DZ Darkom'}
                           </option>
-                          {allArtisans
-                            .filter((a) => !a.isCurated)
-                            .map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.displayName}
-                              </option>
-                            ))}
+                          {allArtisans.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.displayName}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
 
                     <div className="form-field">
+                      <label className="form-label" htmlFor="proj-specs">
+                        {lang === 'ar'
+                          ? 'التخصصات المشاركة (افصل بفاصلة ، - اختياري)'
+                          : 'Lots impliqués (séparés par virgule - opt.)'}
+                      </label>
+                      <input
+                        id="proj-specs"
+                        type="text"
+                        className="form-input"
+                        placeholder={
+                          lang === 'ar'
+                            ? 'سيراميك، سباكة، كهرباء'
+                            : 'Carrelage, plomberie, électricité'
+                        }
+                        value={projSpecialtiesRaw}
+                        onChange={(e) => setProjSpecialtiesRaw(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="form-field">
                       <label className="form-label" htmlFor="proj-services">
                         {lang === 'ar'
-                          ? 'الخدمات المنجزة (افصل بفاصلة ،)'
+                          ? 'الخدمات والأشغال المنجزة (افصل بفاصلة ،)'
                           : 'Prestations réalisées (séparées par virgule)'}
                       </label>
                       <input
@@ -1058,8 +1156,8 @@ export function ProjectManagerDrawer({
                           <span>
                             {processingImg
                               ? lang === 'ar'
-                                ? 'جاري الضغط...'
-                                : 'Compression...'
+                                ? 'جاري الرفع...'
+                                : 'Envoi...'
                               : lang === 'ar'
                                 ? 'اختيار صورة من الجهاز'
                                 : 'Importer une image'}
@@ -1072,7 +1170,12 @@ export function ProjectManagerDrawer({
                             onChange={(e) => {
                               const f = e.target.files?.[0];
                               e.target.value = '';
-                              if (f) void processSingleFile(f, setProjCover);
+                              if (f)
+                                void processSingleFile(
+                                  f,
+                                  'projects',
+                                  setProjCover
+                                );
                             }}
                           />
                         </label>
@@ -1136,7 +1239,12 @@ export function ProjectManagerDrawer({
                           onChange={(e) => {
                             const f = e.target.files?.[0];
                             e.target.value = '';
-                            if (f) void processSingleFile(f, setProjBefore);
+                            if (f)
+                              void processSingleFile(
+                                f,
+                                'projects',
+                                setProjBefore
+                              );
                           }}
                         />
                       </label>
@@ -1175,6 +1283,7 @@ export function ProjectManagerDrawer({
                               if (files.length)
                                 void processBatchFiles(
                                   files,
+                                  'projects',
                                   projExtras.length,
                                   4,
                                   (items) =>
@@ -1273,7 +1382,7 @@ export function ProjectManagerDrawer({
                 </>
               )}
 
-              {activeTab === 'artisan' && (
+              {activeTab === 'artisan' && isAdmin && (
                 <>
                   <form className="project-form" onSubmit={handleArtisanSubmit}>
                     <div className="form-header-row">
@@ -1432,11 +1541,31 @@ export function ProjectManagerDrawer({
                         className="form-input"
                         placeholder={
                           lang === 'ar'
-                            ? 'بورسلان 120×240، لحام TIG، عزل مائي'
+                            ? 'بورسلان كبير المقاس، لحام TIG، عزل مائي'
                             : 'Grès cérame, soudure TIG, étanchéité'
                         }
                         value={artSkillsRaw}
                         onChange={(e) => setArtSkillsRaw(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="form-field">
+                      <label className="form-label" htmlFor="art-tools">
+                        {lang === 'ar'
+                          ? 'الأدوات والتجهيزات المستعملة (افصل بفاصلة ،)'
+                          : 'Outillage utilisé (séparé par virgule)'}
+                      </label>
+                      <input
+                        id="art-tools"
+                        type="text"
+                        className="form-input"
+                        placeholder={
+                          lang === 'ar'
+                            ? 'ميزان ليزر، قاطع مائي، مكبس هيدروليكي'
+                            : 'Niveau laser, coupe à eau, sertisseuse'
+                        }
+                        value={artToolsRaw}
+                        onChange={(e) => setArtToolsRaw(e.target.value)}
                       />
                     </div>
 
@@ -1473,7 +1602,12 @@ export function ProjectManagerDrawer({
                           onChange={(e) => {
                             const f = e.target.files?.[0];
                             e.target.value = '';
-                            if (f) void processSingleFile(f, setArtAvatar);
+                            if (f)
+                              void processSingleFile(
+                                f,
+                                'artisans',
+                                setArtAvatar
+                              );
                           }}
                         />
                       </label>
@@ -1512,6 +1646,7 @@ export function ProjectManagerDrawer({
                               if (files.length)
                                 void processBatchFiles(
                                   files,
+                                  'artisans',
                                   artPhotos.length,
                                   4,
                                   (items) =>
@@ -1606,203 +1741,277 @@ export function ProjectManagerDrawer({
               )}
 
               {activeTab === 'request' && (
-                <form className="project-form" onSubmit={handleRequestSubmit}>
-                  <h3 className="form-heading">
-                    {lang === 'ar'
-                      ? 'إرسال طلب معاينة أو خدمة لفريقنا'
-                      : 'Envoyer une demande à notre équipe'}
-                  </h3>
+                <>
+                  <form className="project-form" onSubmit={handleRequestSubmit}>
+                    <h3 className="form-heading">
+                      {lang === 'ar'
+                        ? 'إرسال طلب معاينة أو خدمة لفريقنا'
+                        : 'Envoyer une demande à notre équipe'}
+                    </h3>
 
-                  <div className="form-field">
-                    <label className="form-label" htmlFor="req-title">
-                      {lang === 'ar' ? 'عنوان الطلب أو المشروع' : 'Objet de la demande'}
-                    </label>
-                    <input
-                      id="req-title"
-                      type="text"
-                      className="form-input"
-                      placeholder={
-                        lang === 'ar'
-                          ? 'مثال: تجديد سيراميك الحمام أو لحام بوابة حديدية'
-                          : 'Ex : Rénovation carrelage ou portail soudé'
-                      }
-                      maxLength={120}
-                      required
-                      value={reqTitle}
-                      onChange={(e) => setReqTitle(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label className="form-label" htmlFor="req-cat">
-                      {lang === 'ar' ? 'التخصص المطلوب' : 'Spécialité recherchée'}
-                    </label>
-                    <select
-                      id="req-cat"
-                      className="form-input"
-                      value={reqCategory}
-                      onChange={(e) =>
-                        setReqCategory(e.target.value as ServiceCategoryId)
-                      }
-                    >
-                      {SERVICE_CATEGORIES.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {lang === 'ar' ? c.ar : c.fr}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-row-2">
                     <div className="form-field">
-                      <label className="form-label" htmlFor="req-wilaya">
-                        {lang === 'ar' ? 'الولاية' : 'Wilaya'}
+                      <label className="form-label" htmlFor="req-title">
+                        {lang === 'ar'
+                          ? 'عنوان الطلب أو المشروع'
+                          : 'Objet de la demande'}
+                      </label>
+                      <input
+                        id="req-title"
+                        type="text"
+                        className="form-input"
+                        placeholder={
+                          lang === 'ar'
+                            ? 'مثال: تجديد سيراميك الحمام أو لحام بوابة حديدية'
+                            : 'Ex : Rénovation carrelage ou portail soudé'
+                        }
+                        maxLength={120}
+                        required
+                        value={reqTitle}
+                        onChange={(e) => setReqTitle(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="form-field">
+                      <label className="form-label" htmlFor="req-cat">
+                        {lang === 'ar'
+                          ? 'التخصص المطلوب'
+                          : 'Spécialité recherchée'}
                       </label>
                       <select
-                        id="req-wilaya"
+                        id="req-cat"
                         className="form-input"
-                        value={reqWilaya}
-                        onChange={(e) => {
-                          const wName = e.target.value;
-                          setReqWilaya(wName);
-                          const found = ALGERIA_WILAYAS.find(
-                            (w) => w.ar === wName
-                          );
-                          if (found && found.communes[0]) {
-                            setReqCommune(found.communes[0]);
-                          }
-                        }}
+                        value={reqCategory}
+                        onChange={(e) =>
+                          setReqCategory(e.target.value as ServiceCategoryId)
+                        }
                       >
-                        {ALGERIA_WILAYAS.map((w) => (
-                          <option key={w.code} value={w.ar}>
-                            {w.code} - {lang === 'ar' ? w.ar : w.fr}
+                        {SERVICE_CATEGORIES.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {lang === 'ar' ? c.ar : c.fr}
                           </option>
                         ))}
                       </select>
                     </div>
-                    <div className="form-field">
-                      <label className="form-label" htmlFor="req-commune">
-                        {lang === 'ar' ? 'البلدية' : 'Commune'}
-                      </label>
-                      <input
-                        id="req-commune"
-                        type="text"
-                        list="req-communes-list"
-                        className="form-input"
-                        maxLength={60}
-                        required
-                        value={reqCommune}
-                        onChange={(e) => setReqCommune(e.target.value)}
-                      />
-                      <datalist id="req-communes-list">
-                        {reqCommunes.map((c) => (
-                          <option key={c} value={c} />
-                        ))}
-                      </datalist>
-                    </div>
-                  </div>
 
-                  <div className="form-field">
-                    <label className="form-label" htmlFor="req-desc">
-                      {lang === 'ar'
-                        ? 'وصف المشروع أو المشكلة'
-                        : 'Description du besoin'}
-                    </label>
-                    <textarea
-                      id="req-desc"
-                      className="form-input form-textarea"
-                      rows={3}
-                      maxLength={1500}
-                      required
-                      value={reqDesc}
-                      onChange={(e) => setReqDesc(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label className="btn btn-ghost btn-sm upload-label">
-                      <Upload size={15} />
-                      <span>
-                        {lang === 'ar'
-                          ? 'إرفاق صورة رئيسية للموقع'
-                          : 'Joindre une photo principale'}
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        hidden
-                        disabled={processingImg}
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          e.target.value = '';
-                          if (f) void processSingleFile(f, setReqCover);
-                        }}
-                      />
-                    </label>
-                    {reqCover && (
-                      <div className="cover-preview">
-                        <img src={reqCover} alt="Request" />
-                        <button
-                          type="button"
-                          className="cover-remove"
-                          onClick={() => setReqCover('')}
-                        >
-                          {lang === 'ar' ? 'إزالة' : 'Retirer'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="form-field">
-                    <label className="btn btn-ghost btn-sm upload-label">
-                      <ImagePlus size={15} />
-                      <span>
-                        {lang === 'ar'
-                          ? `صور إضافية (${reqExtras.length}/3)`
-                          : `Photos supplémentaires (${reqExtras.length}/3)`}
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        hidden
-                        disabled={processingImg || reqExtras.length >= 3}
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          e.target.value = '';
-                          if (files.length)
-                            void processBatchFiles(
-                              files,
-                              reqExtras.length,
-                              3,
-                              (items) =>
-                                setReqExtras((prev) => [...prev, ...items])
+                    <div className="form-row-2">
+                      <div className="form-field">
+                        <label className="form-label" htmlFor="req-wilaya">
+                          {lang === 'ar' ? 'الولاية' : 'Wilaya'}
+                        </label>
+                        <select
+                          id="req-wilaya"
+                          className="form-input"
+                          value={reqWilaya}
+                          onChange={(e) => {
+                            const wName = e.target.value;
+                            setReqWilaya(wName);
+                            const found = ALGERIA_WILAYAS.find(
+                              (w) => w.ar === wName
                             );
-                        }}
+                            if (found && found.communes[0]) {
+                              setReqCommune(found.communes[0]);
+                            }
+                          }}
+                        >
+                          {ALGERIA_WILAYAS.map((w) => (
+                            <option key={w.code} value={w.ar}>
+                              {w.code} - {lang === 'ar' ? w.ar : w.fr}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-field">
+                        <label className="form-label" htmlFor="req-commune">
+                          {lang === 'ar' ? 'البلدية' : 'Commune'}
+                        </label>
+                        <input
+                          id="req-commune"
+                          type="text"
+                          list="req-communes-list"
+                          className="form-input"
+                          maxLength={60}
+                          required
+                          value={reqCommune}
+                          onChange={(e) => setReqCommune(e.target.value)}
+                        />
+                        <datalist id="req-communes-list">
+                          {reqCommunes.map((c) => (
+                            <option key={c} value={c} />
+                          ))}
+                        </datalist>
+                      </div>
+                    </div>
+
+                    <div className="form-field">
+                      <label className="form-label" htmlFor="req-desc">
+                        {lang === 'ar'
+                          ? 'وصف المشروع أو المشكلة'
+                          : 'Description du besoin'}
+                      </label>
+                      <textarea
+                        id="req-desc"
+                        className="form-input form-textarea"
+                        rows={3}
+                        maxLength={1500}
+                        required
+                        value={reqDesc}
+                        onChange={(e) => setReqDesc(e.target.value)}
                       />
-                    </label>
-                  </div>
+                    </div>
 
-                  {errorMsg && <p className="form-error">{errorMsg}</p>}
-                  {successMsg && <p className="form-success">{successMsg}</p>}
+                    <div className="form-field">
+                      <label className="btn btn-ghost btn-sm upload-label">
+                        <Upload size={15} />
+                        <span>
+                          {lang === 'ar'
+                            ? 'إرفاق صورة رئيسية للموقع'
+                            : 'Joindre une photo principale'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          hidden
+                          disabled={processingImg}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (f)
+                              void processSingleFile(
+                                f,
+                                'requests',
+                                setReqCover
+                              );
+                          }}
+                        />
+                      </label>
+                      {reqCover && (
+                        <div className="cover-preview">
+                          <img src={reqCover} alt="Request" />
+                          <button
+                            type="button"
+                            className="cover-remove"
+                            onClick={() => setReqCover('')}
+                          >
+                            {lang === 'ar' ? 'إزالة' : 'Retirer'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
-                  <button
-                    type="submit"
-                    className="btn btn-primary btn-full"
-                    disabled={submitting || processingImg}
-                  >
-                    <Plus size={17} />
-                    <span>
-                      {submitting
-                        ? lang === 'ar'
-                          ? 'جاري الإرسال...'
-                          : 'Envoi...'
-                        : lang === 'ar'
-                          ? 'إرسال الطلب للفريق'
-                          : 'Envoyer la demande'}
-                    </span>
-                  </button>
-                </form>
+                    <div className="form-field">
+                      <label className="btn btn-ghost btn-sm upload-label">
+                        <ImagePlus size={15} />
+                        <span>
+                          {lang === 'ar'
+                            ? `صور إضافية (${reqExtras.length}/3)`
+                            : `Photos supplémentaires (${reqExtras.length}/3)`}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          hidden
+                          disabled={processingImg || reqExtras.length >= 3}
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            e.target.value = '';
+                            if (files.length)
+                              void processBatchFiles(
+                                files,
+                                'requests',
+                                reqExtras.length,
+                                3,
+                                (items) =>
+                                  setReqExtras((prev) => [...prev, ...items])
+                              );
+                          }}
+                        />
+                      </label>
+                      {reqExtras.length > 0 && (
+                        <div className="extra-preview-grid">
+                          {reqExtras.map((img, i) => (
+                            <div key={i} className="extra-preview-item">
+                              <img src={img.imageUrl} alt={img.caption} />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setReqExtras((p) =>
+                                    p.filter((_, idx) => idx !== i)
+                                  )
+                                }
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {errorMsg && <p className="form-error">{errorMsg}</p>}
+                    {successMsg && <p className="form-success">{successMsg}</p>}
+
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-full"
+                      disabled={submitting || processingImg}
+                    >
+                      <Plus size={17} />
+                      <span>
+                        {submitting
+                          ? lang === 'ar'
+                            ? 'جاري الإرسال...'
+                            : 'Envoi...'
+                          : lang === 'ar'
+                            ? 'إرسال الطلب للفريق'
+                            : 'Envoyer la demande'}
+                      </span>
+                    </button>
+                  </form>
+
+                  {allRequests.length > 0 && (
+                    <div className="user-projects-list">
+                      <h3 className="form-heading">
+                        {isAdmin
+                          ? lang === 'ar'
+                            ? `طلبات الزبائن (${allRequests.length})`
+                            : `Demandes clients (${allRequests.length})`
+                          : lang === 'ar'
+                            ? `طلباتي السابقة (${allRequests.length})`
+                            : `Mes demandes (${allRequests.length})`}
+                      </h3>
+                      {allRequests.map((req) => (
+                        <div key={req.id} className="user-proj-row">
+                          <div className="user-proj-info">
+                            <div className="user-proj-title">{req.title}</div>
+                            <div className="user-proj-meta">
+                              {getCategoryLabel(req.category, lang)} ·{' '}
+                              {req.wilaya}
+                            </div>
+                          </div>
+                          <div className="user-proj-actions">
+                            <button
+                              type="button"
+                              className="icon-btn-xs"
+                              title={lang === 'ar' ? 'معاينة' : 'Détails'}
+                              onClick={() => onOpenRequestDetail(req)}
+                            >
+                              <ExternalLink size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="icon-btn-xs danger"
+                              title={lang === 'ar' ? 'حذف' : 'Supprimer'}
+                              onClick={() => void onDeleteRequest(req)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
 
               {activeTab === 'messages' && (
@@ -1844,7 +2053,7 @@ export function ProjectManagerDrawer({
                         {inq.status === 'replied' ? (
                           <div className="inquiry-reply-box">
                             <strong>
-                              {lang === 'ar' ? 'ردّك:' : 'Votre réponse :'}
+                              {lang === 'ar' ? 'الرد:' : 'Réponse :'}
                             </strong>{' '}
                             {inq.replyText}
                           </div>

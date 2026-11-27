@@ -70,7 +70,7 @@ service cloud.firestore {
         (arr.size() == 0 || (arr[0] is string && arr[0].size() >= 1 && arr[0].size() <= 80));
     }
 
-    // Validation Blueprint: Project
+    // Validation Blueprint: Project (Admin Managed)
     function isValidProject(data) {
       return data.keys().hasAll([
           'title', 'category', 'location', 'areaSqm',
@@ -80,7 +80,7 @@ service cloud.firestore {
         data.keys().hasOnly([
           'title', 'category', 'location', 'areaSqm',
           'description', 'coverImage', 'beforeImage',
-          'completedServices', 'artisanId',
+          'completedServices', 'specialties', 'artisanId',
           'ownerId', 'ownerName', 'createdAt', 'updatedAt'
         ]) &&
         data.title is string && data.title.size() >= 3 && data.title.size() <= 120 &&
@@ -91,6 +91,7 @@ service cloud.firestore {
         isValidImageUri(data.coverImage) &&
         (!('beforeImage' in data) || isOptionalImageUri(data.beforeImage)) &&
         (!('completedServices' in data) || isValidTagList(data.completedServices)) &&
+        (!('specialties' in data) || isValidTagList(data.specialties)) &&
         (!('artisanId' in data) || (data.artisanId is string && (data.artisanId.size() == 0 || isValidId(data.artisanId)))) &&
         data.ownerId is string && isValidId(data.ownerId) &&
         data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100 &&
@@ -108,7 +109,7 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
-    // Validation Blueprint: ArtisanProfile (Official Team Member)
+    // Validation Blueprint: ArtisanProfile (Official Team Member - Admin Managed)
     function isValidArtisan(data) {
       return data.keys().hasAll([
           'displayName', 'profession', 'experienceYears',
@@ -117,7 +118,7 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'displayName', 'roleTitle', 'profession', 'experienceYears',
-          'wilaya', 'commune', 'bio', 'skillsList', 'avatarUrl',
+          'wilaya', 'commune', 'bio', 'skillsList', 'toolsList', 'avatarUrl',
           'ownerId', 'createdAt', 'updatedAt'
         ]) &&
         data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100 &&
@@ -128,6 +129,7 @@ service cloud.firestore {
         data.commune is string && data.commune.size() >= 2 && data.commune.size() <= 60 &&
         data.bio is string && data.bio.size() >= 10 && data.bio.size() <= 1200 &&
         (!('skillsList' in data) || isValidTagList(data.skillsList)) &&
+        (!('toolsList' in data) || isValidTagList(data.toolsList)) &&
         isOptionalImageUri(data.avatarUrl) &&
         data.ownerId is string && isValidId(data.ownerId) &&
         data.createdAt is timestamp &&
@@ -142,17 +144,23 @@ service cloud.firestore {
           'ownerId', 'createdAt', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
-          'nameAr', 'nameFr', 'category', 'level',
-          'summaryAr', 'summaryFr', 'toolsAr', 'sortOrder',
+          'nameAr', 'nameFr', 'category', 'level', 'experienceLabel',
+          'summaryAr', 'summaryFr', 'toolsAr', 'toolsFr',
+          'tasksAr', 'tasksFr', 'artisanId', 'sortOrder',
           'ownerId', 'createdAt', 'updatedAt'
         ]) &&
         data.nameAr is string && data.nameAr.size() >= 2 && data.nameAr.size() <= 100 &&
         data.nameFr is string && data.nameFr.size() >= 2 && data.nameFr.size() <= 100 &&
         isValidServiceCategory(data.category) &&
         data.level in ['expert', 'advanced', 'certified'] &&
-        data.summaryAr is string && data.summaryAr.size() >= 5 && data.summaryAr.size() <= 350 &&
-        data.summaryFr is string && data.summaryFr.size() >= 5 && data.summaryFr.size() <= 350 &&
-        data.toolsAr is string && data.toolsAr.size() <= 180 &&
+        (!('experienceLabel' in data) || (data.experienceLabel is string && data.experienceLabel.size() <= 60)) &&
+        data.summaryAr is string && data.summaryAr.size() >= 5 && data.summaryAr.size() <= 450 &&
+        data.summaryFr is string && data.summaryFr.size() >= 5 && data.summaryFr.size() <= 450 &&
+        data.toolsAr is string && data.toolsAr.size() <= 220 &&
+        (!('toolsFr' in data) || (data.toolsFr is string && data.toolsFr.size() <= 220)) &&
+        (!('tasksAr' in data) || (data.tasksAr is string && data.tasksAr.size() <= 600)) &&
+        (!('tasksFr' in data) || (data.tasksFr is string && data.tasksFr.size() <= 600)) &&
+        (!('artisanId' in data) || (data.artisanId is string && (data.artisanId.size() == 0 || isValidId(data.artisanId)))) &&
         data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 999 &&
         data.ownerId is string && isValidId(data.ownerId) &&
         data.createdAt is timestamp &&
@@ -170,7 +178,8 @@ service cloud.firestore {
         data.keys().hasOnly([
           'titleAr', 'titleFr', 'category',
           'natureAr', 'natureFr', 'deliverablesAr', 'deliverablesFr',
-          'stagesAr', 'stagesFr', 'outcomeAr', 'outcomeFr',
+          'stagesAr', 'stagesFr', 'materialsToolsAr', 'materialsToolsFr',
+          'qualityStandardsAr', 'qualityStandardsFr', 'outcomeAr', 'outcomeFr',
           'durationLabel', 'sortOrder', 'ownerId', 'createdAt', 'updatedAt'
         ]) &&
         data.titleAr is string && data.titleAr.size() >= 3 && data.titleAr.size() <= 120 &&
@@ -182,25 +191,29 @@ service cloud.firestore {
         data.deliverablesFr is string && data.deliverablesFr.size() >= 5 && data.deliverablesFr.size() <= 900 &&
         data.stagesAr is string && data.stagesAr.size() >= 5 && data.stagesAr.size() <= 900 &&
         data.stagesFr is string && data.stagesFr.size() >= 5 && data.stagesFr.size() <= 900 &&
+        (!('materialsToolsAr' in data) || (data.materialsToolsAr is string && data.materialsToolsAr.size() <= 600)) &&
+        (!('materialsToolsFr' in data) || (data.materialsToolsFr is string && data.materialsToolsFr.size() <= 600)) &&
+        (!('qualityStandardsAr' in data) || (data.qualityStandardsAr is string && data.qualityStandardsAr.size() <= 600)) &&
+        (!('qualityStandardsFr' in data) || (data.qualityStandardsFr is string && data.qualityStandardsFr.size() <= 600)) &&
         data.outcomeAr is string && data.outcomeAr.size() >= 5 && data.outcomeAr.size() <= 500 &&
         data.outcomeFr is string && data.outcomeFr.size() >= 5 && data.outcomeFr.size() <= 500 &&
-        data.durationLabel is string && data.durationLabel.size() >= 1 && data.durationLabel.size() <= 60 &&
+        data.durationLabel is string && data.durationLabel.size() <= 60 &&
         data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 999 &&
         data.ownerId is string && isValidId(data.ownerId) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
 
-    // Validation Blueprint: ServiceRequest (No PII)
+    // Validation Blueprint: Private Customer ServiceRequest (Owner + Admin Only)
     function isValidServiceRequest(data) {
       return data.keys().hasAll([
           'title', 'category', 'wilaya', 'commune',
-          'description', 'coverImage', 'status',
+          'description', 'coverImage', 'status', 'adminNote',
           'ownerId', 'ownerName', 'createdAt', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
           'title', 'category', 'wilaya', 'commune',
-          'description', 'coverImage', 'status',
+          'description', 'coverImage', 'status', 'adminNote',
           'ownerId', 'ownerName', 'createdAt', 'updatedAt'
         ]) &&
         data.title is string && data.title.size() >= 3 && data.title.size() <= 120 &&
@@ -210,13 +223,14 @@ service cloud.firestore {
         data.description is string && data.description.size() >= 10 && data.description.size() <= 1500 &&
         isOptionalImageUri(data.coverImage) &&
         data.status in ['open', 'in_progress', 'closed'] &&
+        data.adminNote is string && data.adminNote.size() <= 500 &&
         data.ownerId is string && isValidId(data.ownerId) &&
         data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
 
-    // Validation Blueprint: Private Inquiry / Direct Message
+    // Validation Blueprint: Private Client <-> Team Inquiry
     function isValidInquiry(data) {
       return data.keys().hasAll([
           'senderId', 'senderName', 'recipientOwnerId', 'recipientName',
@@ -234,7 +248,7 @@ service cloud.firestore {
         data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100 &&
         data.recipientOwnerId is string && isValidId(data.recipientOwnerId) &&
         data.recipientName is string && data.recipientName.size() >= 1 && data.recipientName.size() <= 100 &&
-        data.contextType in ['artisan', 'request'] &&
+        data.contextType in ['team', 'artisan', 'request'] &&
         data.contextId is string && isValidId(data.contextId) &&
         data.contextTitle is string && data.contextTitle.size() >= 1 && data.contextTitle.size() <= 120 &&
         data.message is string && data.message.size() >= 5 && data.message.size() <= 1000 &&
@@ -257,7 +271,7 @@ service cloud.firestore {
       allow list, write: if false;
     }
 
-    // 0A. Official Team Skills & Expertise (Public Read, Admin Write)
+    // 0A. Official Team Skills & Expertise (Public Read, Admin Write Only)
     match /skills/{skillId} {
       allow get: if isValidId(skillId);
       allow list: if true;
@@ -276,14 +290,15 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
-          'nameAr', 'nameFr', 'category', 'level',
-          'summaryAr', 'summaryFr', 'toolsAr', 'sortOrder', 'updatedAt'
+          'nameAr', 'nameFr', 'category', 'level', 'experienceLabel',
+          'summaryAr', 'summaryFr', 'toolsAr', 'toolsFr',
+          'tasksAr', 'tasksFr', 'artisanId', 'sortOrder', 'updatedAt'
         ]);
 
       allow delete: if isAdmin() && isValidId(skillId);
     }
 
-    // 0B. Official Detailed Service Guides (Public Read, Admin Write)
+    // 0B. Official Detailed Service Guides (Public Read, Admin Write Only)
     match /services/{serviceId} {
       allow get: if isValidId(serviceId);
       allow list: if true;
@@ -304,153 +319,145 @@ service cloud.firestore {
         incoming().diff(existing()).affectedKeys().hasOnly([
           'titleAr', 'titleFr', 'category',
           'natureAr', 'natureFr', 'deliverablesAr', 'deliverablesFr',
-          'stagesAr', 'stagesFr', 'outcomeAr', 'outcomeFr',
+          'stagesAr', 'stagesFr', 'materialsToolsAr', 'materialsToolsFr',
+          'qualityStandardsAr', 'qualityStandardsFr', 'outcomeAr', 'outcomeFr',
           'durationLabel', 'sortOrder', 'updatedAt'
         ]);
 
       allow delete: if isAdmin() && isValidId(serviceId);
     }
 
-    // 1. Public Projects Showcase (No PII; intentionally public read)
+    // 1. Official Team Projects Showcase (Public Read, Admin Write Only)
     match /projects/{projectId} {
       allow get: if isValidId(projectId);
       allow list: if true;
 
-      allow create: if isVerifiedUser() &&
+      allow create: if isAdmin() &&
         isValidId(projectId) &&
         isValidProject(incoming()) &&
         incoming().ownerId == request.auth.uid &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
 
-      allow update: if isVerifiedUser() &&
+      allow update: if isAdmin() &&
         isValidId(projectId) &&
         isValidProject(incoming()) &&
-        (existing().ownerId == request.auth.uid || isAdmin()) &&
         incoming().ownerId == existing().ownerId &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
           'title', 'category', 'location', 'areaSqm',
           'description', 'coverImage', 'beforeImage',
-          'completedServices', 'artisanId', 'updatedAt'
+          'completedServices', 'specialties', 'artisanId', 'updatedAt'
         ]);
 
-      allow delete: if isVerifiedUser() &&
-        isValidId(projectId) &&
-        (existing().ownerId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin() && isValidId(projectId);
 
       match /photos/{photoId} {
         allow get: if isValidId(projectId) && isValidId(photoId);
         allow list: if true;
 
-        allow create: if isVerifiedUser() &&
+        allow create: if isAdmin() &&
           isValidId(projectId) &&
           isValidId(photoId) &&
           isValidPhotoItem(incoming()) &&
           incoming().ownerId == request.auth.uid &&
           incoming().createdAt == request.time &&
-          exists(/databases/$(database)/documents/projects/$(projectId)) &&
-          (
-            get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid ||
-            isAdmin()
-          );
+          exists(/databases/$(database)/documents/projects/$(projectId));
 
-        allow delete: if isVerifiedUser() &&
+        allow delete: if isAdmin() &&
           isValidId(projectId) &&
           isValidId(photoId) &&
-          exists(/databases/$(database)/documents/projects/$(projectId)) &&
-          (
-            existing().ownerId == request.auth.uid ||
-            get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid ||
-            isAdmin()
-          );
+          exists(/databases/$(database)/documents/projects/$(projectId));
       }
     }
 
-    // 2. Team Craftsmen Directory (No PII; intentionally public read)
+    // 2. Official Team Members Directory (Public Read, Admin Write Only)
     match /artisans/{artisanId} {
       allow get: if isValidId(artisanId);
       allow list: if true;
 
-      allow create: if isVerifiedUser() &&
+      allow create: if isAdmin() &&
         isValidId(artisanId) &&
         isValidArtisan(incoming()) &&
         incoming().ownerId == request.auth.uid &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
 
-      allow update: if isVerifiedUser() &&
+      allow update: if isAdmin() &&
         isValidId(artisanId) &&
         isValidArtisan(incoming()) &&
-        (existing().ownerId == request.auth.uid || isAdmin()) &&
         incoming().ownerId == existing().ownerId &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
           'displayName', 'roleTitle', 'profession', 'experienceYears',
-          'wilaya', 'commune', 'bio', 'skillsList', 'avatarUrl', 'updatedAt'
+          'wilaya', 'commune', 'bio', 'skillsList', 'toolsList', 'avatarUrl', 'updatedAt'
         ]);
 
-      allow delete: if isVerifiedUser() &&
-        isValidId(artisanId) &&
-        (existing().ownerId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin() && isValidId(artisanId);
 
       match /photos/{photoId} {
         allow get: if isValidId(artisanId) && isValidId(photoId);
         allow list: if true;
 
-        allow create: if isVerifiedUser() &&
+        allow create: if isAdmin() &&
           isValidId(artisanId) &&
           isValidId(photoId) &&
           isValidPhotoItem(incoming()) &&
           incoming().ownerId == request.auth.uid &&
           incoming().createdAt == request.time &&
-          exists(/databases/$(database)/documents/artisans/$(artisanId)) &&
-          (
-            get(/databases/$(database)/documents/artisans/$(artisanId)).data.ownerId == request.auth.uid ||
-            isAdmin()
-          );
+          exists(/databases/$(database)/documents/artisans/$(artisanId));
 
-        allow delete: if isVerifiedUser() &&
+        allow delete: if isAdmin() &&
           isValidId(artisanId) &&
           isValidId(photoId) &&
-          exists(/databases/$(database)/documents/artisans/$(artisanId)) &&
-          (
-            existing().ownerId == request.auth.uid ||
-            get(/databases/$(database)/documents/artisans/$(artisanId)).data.ownerId == request.auth.uid ||
-            isAdmin()
-          );
+          exists(/databases/$(database)/documents/artisans/$(artisanId));
       }
     }
 
-    // 3. Customer Service Requests Board (No PII; intentionally public read)
+    // 3. Private Customer Service Requests (Strictly Isolated to Owner & Admin)
     match /requests/{requestId} {
-      allow get: if isValidId(requestId);
-      allow list: if true;
+      allow get: if isValidId(requestId) &&
+        isVerifiedUser() &&
+        (existing().ownerId == request.auth.uid || isAdmin());
+
+      allow list: if isVerifiedUser() &&
+        (
+          resource.data.ownerId == request.auth.uid ||
+          request.auth.token.email == 'nassimarif255@gmail.com'
+        );
 
       allow create: if isVerifiedUser() &&
         isValidId(requestId) &&
         isValidServiceRequest(incoming()) &&
         incoming().ownerId == request.auth.uid &&
         incoming().status == 'open' &&
+        incoming().adminNote == '' &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
 
       allow update: if isVerifiedUser() &&
         isValidId(requestId) &&
         isValidServiceRequest(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
         (
-          isAdmin() ||
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'adminNote', 'updatedAt'
+            ])
+          ) ||
           (
             existing().ownerId == request.auth.uid &&
-            existing().status != 'closed' &&
-            incoming().ownerId == existing().ownerId &&
-            incoming().createdAt == existing().createdAt &&
-            incoming().updatedAt == request.time &&
+            existing().status == 'open' &&
+            incoming().status == 'open' &&
+            incoming().adminNote == existing().adminNote &&
             incoming().diff(existing()).affectedKeys().hasOnly([
               'title', 'category', 'wilaya', 'commune',
-              'description', 'coverImage', 'status', 'updatedAt'
+              'description', 'coverImage', 'updatedAt'
             ])
           )
         );
@@ -460,8 +467,16 @@ service cloud.firestore {
         (existing().ownerId == request.auth.uid || isAdmin());
 
       match /photos/{photoId} {
-        allow get: if isValidId(requestId) && isValidId(photoId);
-        allow list: if true;
+        allow get: if isValidId(requestId) &&
+          isValidId(photoId) &&
+          isVerifiedUser() &&
+          (existing().ownerId == request.auth.uid || isAdmin());
+
+        allow list: if isVerifiedUser() &&
+          (
+            resource.data.ownerId == request.auth.uid ||
+            request.auth.token.email == 'nassimarif255@gmail.com'
+          );
 
         allow create: if isVerifiedUser() &&
           isValidId(requestId) &&
@@ -487,7 +502,7 @@ service cloud.firestore {
       }
     }
 
-    // 4. Private Client <-> Team Inquiries (Strictly Isolated)
+    // 4. Private Client <-> Team Inquiries (Strictly Isolated to Sender, Recipient, & Admin)
     match /inquiries/{inquiryId} {
       allow get: if isValidId(inquiryId) &&
         isVerifiedUser() &&
@@ -517,22 +532,16 @@ service cloud.firestore {
       allow update: if isVerifiedUser() &&
         isValidId(inquiryId) &&
         isValidInquiry(incoming()) &&
-        (
-          isAdmin() ||
-          (
-            existing().recipientOwnerId == request.auth.uid &&
-            existing().status != 'replied' &&
-            incoming().status == 'replied' &&
-            incoming().replyText.size() >= 1 &&
-            incoming().senderId == existing().senderId &&
-            incoming().recipientOwnerId == existing().recipientOwnerId &&
-            incoming().createdAt == existing().createdAt &&
-            incoming().updatedAt == request.time &&
-            incoming().diff(existing()).affectedKeys().hasOnly([
-              'replyText', 'status', 'updatedAt'
-            ])
-          )
-        );
+        (existing().recipientOwnerId == request.auth.uid || isAdmin()) &&
+        incoming().status == 'replied' &&
+        incoming().replyText.size() >= 1 &&
+        incoming().senderId == existing().senderId &&
+        incoming().recipientOwnerId == existing().recipientOwnerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'replyText', 'status', 'updatedAt'
+        ]);
 
       allow delete: if isVerifiedUser() &&
         isValidId(inquiryId) &&

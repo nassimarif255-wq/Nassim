@@ -2,7 +2,7 @@
   "entities": {
     "Project": {
       "title": "Project",
-      "description": "A public construction, ceramics, welding, or home renovation project showcased by the dz darkom pro team with optional before/after comparison.",
+      "description": "A real completed construction, ceramics, welding, or home renovation project published by the dz darkom pro admin with optional before/after comparison.",
       "type": "object",
       "properties": {
         "title": { "type": "string", "minLength": 3, "maxLength": 120 },
@@ -30,6 +30,7 @@
         "coverImage": { "type": "string", "minLength": 10, "maxLength": 450000 },
         "beforeImage": { "type": "string", "minLength": 0, "maxLength": 450000 },
         "completedServices": { "type": "array" },
+        "specialties": { "type": "array" },
         "artisanId": { "type": "string", "minLength": 0, "maxLength": 128 },
         "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "ownerName": { "type": "string", "minLength": 1, "maxLength": 100 },
@@ -40,7 +41,7 @@
     },
     "ProjectPhoto": {
       "title": "ProjectPhoto",
-      "description": "Additional gallery photo attached to a project, team craftsman profile, or customer request.",
+      "description": "Additional gallery photo attached to a project, team member profile, or customer service request.",
       "type": "object",
       "properties": {
         "imageUrl": { "type": "string", "minLength": 10, "maxLength": 450000 },
@@ -52,7 +53,7 @@
     },
     "ArtisanProfile": {
       "title": "ArtisanProfile",
-      "description": "Official team craftsman profile on dz darkom pro including specialty, experience, location, skills, and portfolio.",
+      "description": "Official team member profile managed exclusively by admin, including specialty, experience, location, skills, tools, and linked works.",
       "type": "object",
       "properties": {
         "displayName": { "type": "string", "minLength": 2, "maxLength": 100 },
@@ -76,6 +77,7 @@
         "commune": { "type": "string", "minLength": 2, "maxLength": 60 },
         "bio": { "type": "string", "minLength": 10, "maxLength": 1200 },
         "skillsList": { "type": "array" },
+        "toolsList": { "type": "array" },
         "avatarUrl": { "type": "string", "minLength": 0, "maxLength": 450000 },
         "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "createdAt": { "type": "string", "format": "date-time" },
@@ -85,7 +87,7 @@
     },
     "TeamSkill": {
       "title": "TeamSkill",
-      "description": "Team skill and technical expertise managed by admin on dz darkom pro.",
+      "description": "Detailed team skill managed exclusively by admin, linking specialty, mastery level, tools, executable tasks, and assigned team member.",
       "type": "object",
       "properties": {
         "nameAr": { "type": "string", "minLength": 2, "maxLength": 100 },
@@ -105,9 +107,14 @@
           ]
         },
         "level": { "type": "string", "enum": ["expert", "advanced", "certified"] },
-        "summaryAr": { "type": "string", "minLength": 5, "maxLength": 350 },
-        "summaryFr": { "type": "string", "minLength": 5, "maxLength": 350 },
-        "toolsAr": { "type": "string", "minLength": 0, "maxLength": 180 },
+        "experienceLabel": { "type": "string", "minLength": 0, "maxLength": 60 },
+        "summaryAr": { "type": "string", "minLength": 5, "maxLength": 450 },
+        "summaryFr": { "type": "string", "minLength": 5, "maxLength": 450 },
+        "toolsAr": { "type": "string", "minLength": 0, "maxLength": 220 },
+        "toolsFr": { "type": "string", "minLength": 0, "maxLength": 220 },
+        "tasksAr": { "type": "string", "minLength": 0, "maxLength": 600 },
+        "tasksFr": { "type": "string", "minLength": 0, "maxLength": 600 },
+        "artisanId": { "type": "string", "minLength": 0, "maxLength": 128 },
         "sortOrder": { "type": "number" },
         "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "createdAt": { "type": "string", "format": "date-time" },
@@ -117,7 +124,7 @@
     },
     "TeamServiceGuide": {
       "title": "TeamServiceGuide",
-      "description": "Detailed service guide explaining nature of work, deliverables, execution stages, and client outcomes.",
+      "description": "Comprehensive service sheet managed by admin covering definition, deliverables, stages, materials/tools, quality standards, client outcome, and optional estimated duration.",
       "type": "object",
       "properties": {
         "titleAr": { "type": "string", "minLength": 3, "maxLength": 120 },
@@ -142,9 +149,13 @@
         "deliverablesFr": { "type": "string", "minLength": 5, "maxLength": 900 },
         "stagesAr": { "type": "string", "minLength": 5, "maxLength": 900 },
         "stagesFr": { "type": "string", "minLength": 5, "maxLength": 900 },
+        "materialsToolsAr": { "type": "string", "minLength": 0, "maxLength": 600 },
+        "materialsToolsFr": { "type": "string", "minLength": 0, "maxLength": 600 },
+        "qualityStandardsAr": { "type": "string", "minLength": 0, "maxLength": 600 },
+        "qualityStandardsFr": { "type": "string", "minLength": 0, "maxLength": 600 },
         "outcomeAr": { "type": "string", "minLength": 5, "maxLength": 500 },
         "outcomeFr": { "type": "string", "minLength": 5, "maxLength": 500 },
-        "durationLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "durationLabel": { "type": "string", "minLength": 0, "maxLength": 60 },
         "sortOrder": { "type": "number" },
         "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "createdAt": { "type": "string", "format": "date-time" },
@@ -154,7 +165,7 @@
     },
     "ServiceRequest": {
       "title": "ServiceRequest",
-      "description": "Customer service request sent to the dz darkom pro team specifying specialty, details, and wilaya/commune.",
+      "description": "Private customer service request submitted to the dz darkom pro team (visible only to request owner and admin).",
       "type": "object",
       "properties": {
         "title": { "type": "string", "minLength": 3, "maxLength": 120 },
@@ -177,23 +188,24 @@
         "description": { "type": "string", "minLength": 10, "maxLength": 1500 },
         "coverImage": { "type": "string", "minLength": 0, "maxLength": 450000 },
         "status": { "type": "string", "enum": ["open", "in_progress", "closed"] },
+        "adminNote": { "type": "string", "minLength": 0, "maxLength": 500 },
         "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "ownerName": { "type": "string", "minLength": 1, "maxLength": 100 },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["title", "category", "wilaya", "commune", "description", "coverImage", "status", "ownerId", "ownerName", "createdAt", "updatedAt"]
+      "required": ["title", "category", "wilaya", "commune", "description", "coverImage", "status", "adminNote", "ownerId", "ownerName", "createdAt", "updatedAt"]
     },
     "Inquiry": {
       "title": "Inquiry",
-      "description": "Private two-way message and contact exchange between a client and the dz darkom pro team.",
+      "description": "Private direct communication message between a customer and the dz darkom pro team.",
       "type": "object",
       "properties": {
         "senderId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "senderName": { "type": "string", "minLength": 1, "maxLength": 100 },
         "recipientOwnerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "recipientName": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "contextType": { "type": "string", "enum": ["artisan", "request"] },
+        "contextType": { "type": "string", "enum": ["team", "artisan", "request"] },
         "contextId": { "type": "string", "minLength": 1, "maxLength": 128 },
         "contextTitle": { "type": "string", "minLength": 1, "maxLength": 120 },
         "message": { "type": "string", "minLength": 5, "maxLength": 1000 },
@@ -209,39 +221,39 @@
   "firestore": {
     "/skills/{skillId}": {
       "schema": { "$ref": "#/entities/TeamSkill" },
-      "description": "Public directory of official team skills & specialties managed by admin."
+      "description": "Public catalog of team technical skills managed exclusively by admin."
     },
     "/services/{serviceId}": {
       "schema": { "$ref": "#/entities/TeamServiceGuide" },
-      "description": "Public detailed service guides covering nature, deliverables, stages, and outcomes."
+      "description": "Public detailed service guides managed exclusively by admin."
     },
     "/projects/{projectId}": {
       "schema": { "$ref": "#/entities/Project" },
-      "description": "Public showcase of real projects with before/after comparison across all specialties."
+      "description": "Public showcase of real team projects with before/after comparison, managed exclusively by admin."
     },
     "/projects/{projectId}/photos/{photoId}": {
       "schema": { "$ref": "#/entities/ProjectPhoto" },
-      "description": "Additional photos for a project."
+      "description": "Additional project photos managed exclusively by admin."
     },
     "/artisans/{artisanId}": {
       "schema": { "$ref": "#/entities/ArtisanProfile" },
-      "description": "Official team craftsman profiles with specialty, experience, skills, and portfolio."
+      "description": "Official team member profiles managed exclusively by admin."
     },
     "/artisans/{artisanId}/photos/{photoId}": {
       "schema": { "$ref": "#/entities/ProjectPhoto" },
-      "description": "Portfolio photos attached to a team craftsman profile."
+      "description": "Portfolio photos attached to a team member profile, managed exclusively by admin."
     },
     "/requests/{requestId}": {
       "schema": { "$ref": "#/entities/ServiceRequest" },
-      "description": "Customer service requests directed to the team."
+      "description": "Private customer service requests visible only to the submitting user and admin."
     },
     "/requests/{requestId}/photos/{photoId}": {
       "schema": { "$ref": "#/entities/ProjectPhoto" },
-      "description": "Problem photos attached to a customer service request."
+      "description": "Photos attached by the customer to their private service request."
     },
     "/inquiries/{inquiryId}": {
       "schema": { "$ref": "#/entities/Inquiry" },
-      "description": "Private direct communication messages between clients and team craftsmen."
+      "description": "Private direct messages between customers and the team."
     }
   }
 }

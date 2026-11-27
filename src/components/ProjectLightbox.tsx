@@ -10,14 +10,11 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import { X, Trash2, Pencil, Upload, MoveHorizontal } from 'lucide-react';
+import { MoveHorizontal, Pencil, Trash2, Upload, X } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import {
-  ProjectPhotoItem,
-  ProjectRecord,
-} from '../data/showcaseDefaults';
+import { ProjectPhotoItem, ProjectRecord } from '../data/showcaseDefaults';
 import { AppLang, getCategoryLabel } from '../data/i18n';
-import { compressImageFile } from '../utils/imageProcessor';
+import { uploadMediaImage } from '../utils/mediaStorage';
 
 interface ProjectLightboxProps {
   project: ProjectRecord | null;
@@ -56,16 +53,13 @@ export function ProjectLightbox({
   }, [project?.id, project?.beforeImage]);
 
   useEffect(() => {
-    if (!project || project.isCurated) {
+    if (!project) {
       setExtraPhotos([]);
       return;
     }
 
     const photosPath = `projects/${project.id}/photos`;
-    const q = query(
-      collection(db, photosPath),
-      orderBy('createdAt', 'asc')
-    );
+    const q = query(collection(db, photosPath), orderBy('createdAt', 'asc'));
 
     const unsub = onSnapshot(
       q,
@@ -100,11 +94,8 @@ export function ProjectLightbox({
 
   if (!project) return null;
 
-  const canManage =
-    !project.isCurated &&
-    !!user &&
-    user.emailVerified &&
-    (project.ownerId === user.uid || isAdmin);
+  // Strict Official Team RBAC: only verified Admin manages projects
+  const canManage = !!user && user.emailVerified && isAdmin;
 
   const allPhotos: { id?: string; imageUrl: string; caption: string }[] = [
     { imageUrl: project.coverImage, caption: project.title },
@@ -119,13 +110,11 @@ export function ProjectLightbox({
           },
         ]
       : []),
-    ...(project.isCurated
-      ? project.extraPhotos || []
-      : extraPhotos.map((p) => ({
-          id: p.id,
-          imageUrl: p.imageUrl,
-          caption: p.caption,
-        }))),
+    ...extraPhotos.map((p) => ({
+      id: p.id,
+      imageUrl: p.imageUrl,
+      caption: p.caption,
+    })),
   ];
 
   const safeIdx = activePhotoIdx < allPhotos.length ? activePhotoIdx : 0;
@@ -134,18 +123,18 @@ export function ProjectLightbox({
   const handleAddPhotoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || !user || project.isCurated) return;
+    if (!file || !user || !canManage) return;
 
     setPhotoError('');
     setAddingPhoto(true);
     try {
-      const compressed = await compressImageFile(file);
+      const uri = await uploadMediaImage(file, 'projects', user.uid);
       const photoId = `photo_${Date.now()}_${Math.random()
         .toString(36)
         .slice(2, 7)}`;
       const path = `projects/${project.id}/photos/${photoId}`;
       await setDoc(doc(db, 'projects', project.id, 'photos', photoId), {
-        imageUrl: compressed,
+        imageUrl: uri,
         caption: photoCaption.trim().slice(0, 200) || project.title,
         ownerId: user.uid,
         createdAt: serverTimestamp(),
@@ -163,7 +152,7 @@ export function ProjectLightbox({
   };
 
   const handleDeleteExtraPhoto = async (photoId: string) => {
-    if (!user || project.isCurated) return;
+    if (!user || !canManage) return;
     const path = `projects/${project.id}/photos/${photoId}`;
     try {
       await deleteDoc(doc(db, 'projects', project.id, 'photos', photoId));
@@ -189,10 +178,7 @@ export function ProjectLightbox({
       aria-labelledby="lightbox-title"
       onClick={onClose}
     >
-      <div
-        className="lightbox-shell"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="lightbox-shell" onClick={(e) => e.stopPropagation()}>
         <div className="lightbox-top">
           <div className="lightbox-meta-line">
             <span>{getCategoryLabel(project.category, lang)}</span>
@@ -216,7 +202,11 @@ export function ProjectLightbox({
         <div className="lightbox-body">
           <div className="lightbox-media-col">
             {project.beforeImage && (
-              <div className="segmented-control" style={{ marginTop: 0 }} role="tablist">
+              <div
+                className="segmented-control"
+                style={{ marginTop: 0 }}
+                role="tablist"
+              >
                 <button
                   type="button"
                   role="tab"
@@ -224,7 +214,9 @@ export function ProjectLightbox({
                   className={`seg-btn${viewMode === 'compare' ? ' is-active' : ''}`}
                   onClick={() => setViewMode('compare')}
                 >
-                  {lang === 'ar' ? 'مقارنة قبل / بعد' : 'Comparatif Avant / Après'}
+                  {lang === 'ar'
+                    ? 'مقارنة قبل / بعد'
+                    : 'Comparatif Avant / Après'}
                 </button>
                 <button
                   type="button"
@@ -383,6 +375,16 @@ export function ProjectLightbox({
                 </span>
                 <span className="spec-val tabular-nums">{allPhotos.length}</span>
               </div>
+              {project.specialties && project.specialties.length > 0 && (
+                <div className="spec-row">
+                  <span className="spec-key">
+                    {lang === 'ar' ? 'التخصصات' : 'Lots'}
+                  </span>
+                  <span className="spec-val">
+                    {project.specialties.join(' · ')}
+                  </span>
+                </div>
+              )}
             </div>
 
             {project.completedServices &&
@@ -467,14 +469,6 @@ export function ProjectLightbox({
                   </button>
                 </div>
               </div>
-            )}
-
-            {project.isCurated && (
-              <p className="curated-note">
-                {lang === 'ar'
-                  ? 'مشروع مرجعي من أرشيف فريق اخدم دارك dz darkom pro. يمكن لمدير الفريق إضافة وتعديل المشاريع الحقيقية وصور قبل/بعد من لوحة الإدارة.'
-                  : 'Projet de référence de l’équipe dz darkom pro. L’administrateur peut publier et modifier les chantiers réels avant/après depuis l’espace gestion.'}
-              </p>
             )}
           </div>
         </div>

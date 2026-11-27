@@ -11,14 +11,14 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
-import { X, Upload, Trash2, MessageSquare } from 'lucide-react';
+import { MessageSquare, Save, Trash2, Upload, X } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
   ProjectPhotoItem,
   ServiceRequestRecord,
 } from '../data/showcaseDefaults';
 import { AppLang, getCategoryLabel } from '../data/i18n';
-import { compressImageFile } from '../utils/imageProcessor';
+import { uploadMediaImage } from '../utils/mediaStorage';
 
 interface RequestDetailModalProps {
   request: ServiceRequestRecord | null;
@@ -27,7 +27,7 @@ interface RequestDetailModalProps {
   lang: AppLang;
   onClose: () => void;
   onDelete: (req: ServiceRequestRecord) => void;
-  onContact: (req: ServiceRequestRecord) => void;
+  onContact: (req: ServiceRequestRecord, toTeam?: boolean) => void;
 }
 
 export function RequestDetailModal({
@@ -43,11 +43,15 @@ export function RequestDetailModal({
   const [activeIdx, setActiveIdx] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [photoError, setPhotoError] = useState('');
+  const [adminNote, setAdminNote] = useState('');
+  const [noteSaved, setNoteSaved] = useState(false);
 
   useEffect(() => {
     setActiveIdx(0);
     setPhotoError('');
-  }, [request?.id]);
+    setAdminNote(request?.adminNote || '');
+    setNoteSaved(false);
+  }, [request?.id, request?.adminNote]);
 
   useEffect(() => {
     if (!request) {
@@ -90,10 +94,8 @@ export function RequestDetailModal({
 
   if (!request) return null;
 
-  const canManage =
-    !!user &&
-    user.emailVerified &&
-    (request.ownerId === user.uid || isAdmin);
+  const isOwner = !!user && user.emailVerified && request.ownerId === user.uid;
+  const canManage = !!user && user.emailVerified && (isOwner || isAdmin);
 
   const allPhotos: { id?: string; imageUrl: string; caption: string }[] = [
     ...(request.coverImage
@@ -111,29 +113,42 @@ export function RequestDetailModal({
   const handleStatusChange = async (
     nextStatus: 'open' | 'in_progress' | 'closed'
   ) => {
-    if (!canManage) return;
+    if (!isAdmin) return;
     const path = `requests/${request.id}`;
     await updateDoc(doc(db, 'requests', request.id), {
       status: nextStatus,
+      adminNote: adminNote.trim().slice(0, 500),
       updatedAt: serverTimestamp(),
     }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+    setNoteSaved(true);
+  };
+
+  const handleSaveNote = async () => {
+    if (!isAdmin) return;
+    const path = `requests/${request.id}`;
+    await updateDoc(doc(db, 'requests', request.id), {
+      status: request.status,
+      adminNote: adminNote.trim().slice(0, 500),
+      updatedAt: serverTimestamp(),
+    }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+    setNoteSaved(true);
   };
 
   const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || !user) return;
+    if (!file || !user || !canManage) return;
 
     setPhotoError('');
     setUploading(true);
     try {
-      const compressed = await compressImageFile(file);
+      const uri = await uploadMediaImage(file, 'requests', user.uid);
       const photoId = `reqp_${Date.now()}_${Math.random()
         .toString(36)
         .slice(2, 6)}`;
       const path = `requests/${request.id}/photos/${photoId}`;
       await setDoc(doc(db, 'requests', request.id, 'photos', photoId), {
-        imageUrl: compressed,
+        imageUrl: uri,
         caption: request.title,
         ownerId: user.uid,
         createdAt: serverTimestamp(),
@@ -160,8 +175,8 @@ export function RequestDetailModal({
   const statusLabel =
     request.status === 'open'
       ? lang === 'ar'
-        ? 'مفتوح'
-        : 'Ouvert'
+        ? 'قيد المراجعة'
+        : 'À l’étude'
       : request.status === 'in_progress'
         ? lang === 'ar'
           ? 'قيد التنفيذ'
@@ -264,7 +279,7 @@ export function RequestDetailModal({
             <div className="lightbox-specs">
               <div className="spec-row">
                 <span className="spec-key">
-                  {lang === 'ar' ? 'المهنة المطلوبة' : 'Métier'}
+                  {lang === 'ar' ? 'التخصص المطلوب' : 'Spécialité'}
                 </span>
                 <span className="spec-val">
                   {getCategoryLabel(request.category, lang)}
@@ -286,25 +301,50 @@ export function RequestDetailModal({
               </div>
             </div>
 
-            {(!user || user.uid !== request.ownerId) &&
-              request.status !== 'closed' && (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-full"
-                  onClick={() => onContact(request)}
-                >
-                  <MessageSquare size={17} />
-                  <span>
-                    {lang === 'ar'
-                      ? 'تواصل مع الزبون وقدّم عرضك'
-                      : 'Contacter le client et proposer un devis'}
-                  </span>
-                </button>
-              )}
+            {request.adminNote && (
+              <div className="completed-services-box">
+                <h3 className="form-label">
+                  {lang === 'ar' ? 'ملاحظة فريق الإدارة' : 'Note de l’équipe'}
+                </h3>
+                <p className="lightbox-desc" style={{ margin: 0 }}>
+                  {request.adminNote}
+                </p>
+              </div>
+            )}
+
+            {isAdmin && user && user.uid !== request.ownerId && (
+              <button
+                type="button"
+                className="btn btn-primary btn-full"
+                onClick={() => onContact(request, false)}
+              >
+                <MessageSquare size={17} />
+                <span>
+                  {lang === 'ar'
+                    ? 'مراسلة صاحب الطلب'
+                    : 'Contacter le client'}
+                </span>
+              </button>
+            )}
+
+            {!isAdmin && isOwner && (
+              <button
+                type="button"
+                className="btn btn-primary btn-full"
+                onClick={() => onContact(request, true)}
+              >
+                <MessageSquare size={17} />
+                <span>
+                  {lang === 'ar'
+                    ? 'مراسلة الفريق بخصوص هذا الطلب'
+                    : 'Écrire à l’équipe à propos de cette demande'}
+                </span>
+              </button>
+            )}
 
             {canManage && (
               <div className="lightbox-manage-box">
-                {(request.status !== 'closed' || isAdmin) && (
+                {isAdmin && (
                   <>
                     <div className="form-field">
                       <label className="form-label" htmlFor="req-status-sel">
@@ -315,13 +355,13 @@ export function RequestDetailModal({
                         className="form-input"
                         value={request.status}
                         onChange={(e) =>
-                          handleStatusChange(
+                          void handleStatusChange(
                             e.target.value as 'open' | 'in_progress' | 'closed'
                           )
                         }
                       >
                         <option value="open">
-                          {lang === 'ar' ? 'مفتوح' : 'Ouvert'}
+                          {lang === 'ar' ? 'قيد المراجعة' : 'À l’étude'}
                         </option>
                         <option value="in_progress">
                           {lang === 'ar' ? 'قيد التنفيذ' : 'En cours'}
@@ -332,29 +372,66 @@ export function RequestDetailModal({
                       </select>
                     </div>
 
-                    <div className="lightbox-add-photo">
-                      <label className="btn btn-ghost btn-sm upload-label">
-                        <Upload size={15} />
-                        <span>
-                          {uploading
-                            ? lang === 'ar'
-                              ? 'جاري الرفع...'
-                              : 'Envoi...'
-                            : lang === 'ar'
-                              ? 'إرفاق صورة إضافية للمشكلة'
-                              : 'Joindre une photo'}
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          hidden
-                          disabled={uploading}
-                          onChange={handleAddPhoto}
-                        />
+                    <div className="form-field">
+                      <label className="form-label" htmlFor="req-admin-note">
+                        {lang === 'ar'
+                          ? 'ملاحظة الإدارة للزبون'
+                          : 'Note admin pour le client'}
                       </label>
-                      {photoError && <p className="form-error">{photoError}</p>}
+                      <div className="url-inline">
+                        <input
+                          id="req-admin-note"
+                          type="text"
+                          className="form-input"
+                          maxLength={500}
+                          value={adminNote}
+                          onChange={(e) => {
+                            setAdminNote(e.target.value);
+                            setNoteSaved(false);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => void handleSaveNote()}
+                        >
+                          <Save size={14} />
+                        </button>
+                      </div>
+                      {noteSaved && (
+                        <p className="form-success">
+                          {lang === 'ar'
+                            ? 'تم حفظ التحديث.'
+                            : 'Mise à jour enregistrée.'}
+                        </p>
+                      )}
                     </div>
                   </>
+                )}
+
+                {(request.status === 'open' || isAdmin) && (
+                  <div className="lightbox-add-photo">
+                    <label className="btn btn-ghost btn-sm upload-label">
+                      <Upload size={15} />
+                      <span>
+                        {uploading
+                          ? lang === 'ar'
+                            ? 'جاري الرفع...'
+                            : 'Envoi...'
+                          : lang === 'ar'
+                            ? 'إرفاق صورة إضافية للمشكلة'
+                            : 'Joindre une photo'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        disabled={uploading}
+                        onChange={handleAddPhoto}
+                      />
+                    </label>
+                    {photoError && <p className="form-error">{photoError}</p>}
+                  </div>
                 )}
 
                 <div className="lightbox-owner-actions">

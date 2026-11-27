@@ -10,19 +10,21 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import { X, Upload, Trash2, Pencil, MessageSquare } from 'lucide-react';
+import { MessageSquare, Pencil, Trash2, Upload, X } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
   ArtisanRecord,
   ProjectPhotoItem,
   ProjectRecord,
+  TeamSkillRecord,
 } from '../data/showcaseDefaults';
 import { AppLang, getCategoryLabel } from '../data/i18n';
-import { compressImageFile } from '../utils/imageProcessor';
+import { uploadMediaImage } from '../utils/mediaStorage';
 
 interface ArtisanProfileModalProps {
   artisan: ArtisanRecord | null;
   linkedProjects: ProjectRecord[];
+  linkedSkills: TeamSkillRecord[];
   user: User | null;
   isAdmin: boolean;
   lang: AppLang;
@@ -36,6 +38,7 @@ interface ArtisanProfileModalProps {
 export function ArtisanProfileModal({
   artisan,
   linkedProjects,
+  linkedSkills,
   user,
   isAdmin,
   lang,
@@ -51,7 +54,7 @@ export function ArtisanProfileModal({
   const [photoError, setPhotoError] = useState('');
 
   useEffect(() => {
-    if (!artisan || artisan.isCurated) {
+    if (!artisan) {
       setPhotos([]);
       return;
     }
@@ -91,27 +94,24 @@ export function ArtisanProfileModal({
 
   if (!artisan) return null;
 
-  const canManage =
-    !artisan.isCurated &&
-    !!user &&
-    user.emailVerified &&
-    (artisan.ownerId === user.uid || isAdmin);
+  // Strict Official Team RBAC: only verified Admin manages team profiles
+  const canManage = !!user && user.emailVerified && isAdmin;
 
   const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || !user || artisan.isCurated) return;
+    if (!file || !user || !canManage) return;
 
     setPhotoError('');
     setUploading(true);
     try {
-      const compressed = await compressImageFile(file);
+      const uri = await uploadMediaImage(file, 'artisans', user.uid);
       const photoId = `artp_${Date.now()}_${Math.random()
         .toString(36)
         .slice(2, 6)}`;
       const path = `artisans/${artisan.id}/photos/${photoId}`;
       await setDoc(doc(db, 'artisans', artisan.id, 'photos', photoId), {
-        imageUrl: compressed,
+        imageUrl: uri,
         caption: caption.trim().slice(0, 200) || artisan.displayName,
         ownerId: user.uid,
         createdAt: serverTimestamp(),
@@ -129,7 +129,7 @@ export function ArtisanProfileModal({
   };
 
   const handleDeletePhoto = async (photoId: string) => {
-    if (artisan.isCurated) return;
+    if (!canManage) return;
     const path = `artisans/${artisan.id}/photos/${photoId}`;
     await deleteDoc(doc(db, 'artisans', artisan.id, 'photos', photoId)).catch(
       (err) => handleFirestoreError(err, OperationType.DELETE, path)
@@ -282,6 +282,36 @@ export function ArtisanProfileModal({
               </div>
             )}
 
+            {artisan.toolsList && artisan.toolsList.length > 0 && (
+              <div className="completed-services-box">
+                <h3 className="form-label">
+                  {lang === 'ar' ? 'الأدوات والتجهيزات' : 'Outillage utilisé'}
+                </h3>
+                <ul className="service-bullet-list">
+                  {artisan.toolsList.map((tool, idx) => (
+                    <li key={idx}>{tool}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {linkedSkills.length > 0 && (
+              <div className="completed-services-box">
+                <h3 className="form-label">
+                  {lang === 'ar'
+                    ? 'مهارات الفريق المرتبطة بالعضو'
+                    : 'Compétences de l’équipe rattachées'}
+                </h3>
+                <ul className="service-bullet-list">
+                  {linkedSkills.map((sk) => (
+                    <li key={sk.id}>
+                      {lang === 'ar' ? sk.nameAr : sk.nameFr}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="lightbox-specs">
               <div className="spec-row">
                 <span className="spec-key">
@@ -310,7 +340,7 @@ export function ArtisanProfileModal({
               </div>
             </div>
 
-            {!artisan.isCurated && (!user || user.uid !== artisan.ownerId) && (
+            {(!user || user.uid !== artisan.ownerId) && (
               <button
                 type="button"
                 className="btn btn-primary btn-full"
@@ -319,8 +349,8 @@ export function ArtisanProfileModal({
                 <MessageSquare size={17} />
                 <span>
                   {lang === 'ar'
-                    ? 'تواصل مع عضو الفريق'
-                    : 'Contacter ce membre'}
+                    ? 'تواصل مع الفريق بخصوص هذا الاختصاص'
+                    : 'Contacter l’équipe à ce sujet'}
                 </span>
               </button>
             )}

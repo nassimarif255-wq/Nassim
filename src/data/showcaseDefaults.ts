@@ -32,10 +32,10 @@ export interface ProjectRecord {
   coverImage: string;
   beforeImage?: string;
   completedServices?: string[];
+  specialties?: string[];
   artisanId?: string;
   ownerId: string;
   ownerName: string;
-  isCurated?: boolean;
   extraPhotos?: { imageUrl: string; caption: string }[];
 }
 
@@ -49,9 +49,9 @@ export interface ArtisanRecord {
   commune: string;
   bio: string;
   skillsList?: string[];
+  toolsList?: string[];
   avatarUrl: string;
   ownerId: string;
-  isCurated?: boolean;
 }
 
 export type SkillLevelId = 'expert' | 'advanced' | 'certified';
@@ -62,12 +62,16 @@ export interface TeamSkillRecord {
   nameFr: string;
   category: ServiceCategoryId;
   level: SkillLevelId;
+  experienceLabel?: string;
   summaryAr: string;
   summaryFr: string;
   toolsAr: string;
+  toolsFr?: string;
+  tasksAr?: string;
+  tasksFr?: string;
+  artisanId?: string;
   sortOrder: number;
   ownerId: string;
-  isCurated?: boolean;
 }
 
 export interface TeamServiceGuideRecord {
@@ -81,12 +85,15 @@ export interface TeamServiceGuideRecord {
   deliverablesFr: string;
   stagesAr: string;
   stagesFr: string;
+  materialsToolsAr?: string;
+  materialsToolsFr?: string;
+  qualityStandardsAr?: string;
+  qualityStandardsFr?: string;
   outcomeAr: string;
   outcomeFr: string;
   durationLabel: string;
   sortOrder: number;
   ownerId: string;
-  isCurated?: boolean;
 }
 
 export interface ServiceRequestRecord {
@@ -98,6 +105,7 @@ export interface ServiceRequestRecord {
   description: string;
   coverImage: string;
   status: 'open' | 'in_progress' | 'closed';
+  adminNote?: string;
   ownerId: string;
   ownerName: string;
 }
@@ -108,7 +116,7 @@ export interface InquiryRecord {
   senderName: string;
   recipientOwnerId: string;
   recipientName: string;
-  contextType: 'artisan' | 'request';
+  contextType: 'team' | 'artisan' | 'request';
   contextId: string;
   contextTitle: string;
   message: string;
@@ -129,456 +137,345 @@ export const GENERATED_ASSETS = {
   electricalMep: electricalMepImg,
 };
 
+// Official technical capability templates (editable/importable via Admin into Firestore; contain zero fake member names or fake projects)
 export const CURATED_SKILLS: TeamSkillRecord[] = [
   {
-    id: 'baseline-skill-ceramics',
+    id: 'template-skill-ceramics',
     nameAr: 'تركيب البورسلان والسيراميك كبير المقاس',
     nameFr: 'Pose grès cérame & dalles grand format',
     category: 'ceramics',
     level: 'expert',
+    experienceLabel: 'تشطيب عالي الدقة',
     summaryAr:
-      'تبليط الأرضيات والجدران بألواح 120×120 و120×240 سم مع معالجة الميول وضبط الفواصل عند 1 ملم.',
+      'تبليط الأرضيات والجدران بالبورسلان والسيراميك والرخام مع ضبط الاستواء والميول ومعالجة الفواصل.',
     summaryFr:
-      'Pose de dalles 120×120 et 120×240 cm avec maîtrise des pentes et joints de 1 mm.',
-    toolsAr: 'ميزان الليزر الدوار، مشابك التسوية، قاطع ألواح مائي',
+      'Pose de grès cérame, faïence et marbre avec contrôle de planéité, gestion des pentes et joints précis.',
+    toolsAr: 'ميزان ليزري، مشابك تسوية، قاطع ألواح مائي، مسننة غراء مزدوج',
+    toolsFr: 'Niveau laser, cales autonivelantes, coupe-carreaux à eau',
+    tasksAr:
+      'تسوية الأرضيات وتجهيز السطح\nتثبيت ألواح البورسلان 120×120 و60×120\nتقطيع الزوايا بزاوية 45 درجة (Onglet)\nملء الفواصل بالإيبوكسي المقاوم للماء',
+    tasksFr:
+      'Ragréage et préparation des supports\nPose de dalles grand format 120×120 et 60×120\nCoupes d’onglet à 45°\nJointoiement hydrofuge et époxy',
+    artisanId: '',
     sortOrder: 1,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-skill-construction',
+    id: 'template-skill-construction',
     nameAr: 'البناء الهيكلي والخرسانة والتلبيس',
     nameFr: 'Maçonnerie structurelle & enduits',
     category: 'construction_renovation',
     level: 'expert',
+    experienceLabel: 'أشغال كبرى وميدانية',
     summaryAr:
-      'بناء الجدران الحاملة والقواطع، صب الخرسانة، التلبيس الإسمنتي الموزون، وتهيئة الأرضيات.',
+      'بناء الجدران والقواطع، الأشغال الخرسانية، التلبيس الإسمنتي الموزون، وتهيئة الواجهات والتراسات.',
     summaryFr:
-      'Élévation de murs, béton armé, enduits dressés au laser et chapes de finition.',
-    toolsAr: 'شاقول ليزري، خلاط ميكانيكي، مساطر تسوية ألمنيوم',
+      'Élévation de murs et cloisons, ouvrages béton, enduits dressés et préparation des terrasses.',
+    toolsAr: 'شاقول ليزري، خلاط ميكانيكي، مساطر تسوية ألمنيوم، معدات تدعيم',
+    toolsFr: 'Fil à plomb laser, bétonnière, règles alu dressées',
+    tasksAr:
+      'بناء الجدران بالطوب والبلوك والآجر\nالتلبيس الداخلي والخارجي الموزون\nصب الأرضيات الخرسانية وضبط الميول\nتكسية الواجهات بالحجر الطبيعي',
+    tasksFr:
+      'Maçonnerie en brique et parpaing\nEnduits intérieurs et façades dressés\nChapes béton et formes de pente\nHabillage pierre naturelle',
+    artisanId: '',
     sortOrder: 2,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-skill-renovation',
-    nameAr: 'ترميم الشقق والفيلات وإعادة التوزيع',
+    id: 'template-skill-renovation',
+    nameAr: 'الترميم الشامل وإعادة التهيئة الداخلية',
     nameFr: 'Rénovation intégrale & réaménagement',
     category: 'construction_renovation',
     level: 'certified',
+    experienceLabel: 'ترميم وتحديث',
     summaryAr:
-      'هدم آمن للجدران غير الحاملة، معالجة الرطوبة والشقوق، وتحديث كامل من البنية حتى التسليم.',
+      'هدم آمن للقواطع غير الحاملة، معالجة الرطوبة والشقوق، وإعادة توزيع المساحات وفق متطلبات المبنى.',
     summaryFr:
-      'Démolition contrôlée, traitement d’humidité et rénovation clé en main.',
-    toolsAr: 'أجهزة قياس الرطوبة، مطارق هدم احترافية، عوازل إيبوكسي',
+      'Démolition contrôlée de cloisons, traitement d’humidité et réorganisation complète des espaces.',
+    toolsAr: 'كاشف رطوبة، مطارق هدم احترافية، مواد معالجة وعزل إيبوكسي',
+    toolsFr: 'Testeur d’humidité, perforateurs-burineurs, résines d’étanchéité',
+    tasksAr:
+      'فحص الجدران ومعالجة التسربات والرطوبة\nإعادة تقسيم الغرف والمطابخ\nإزالة البلاط والملبسات القديمة\nتجهيز الموقع لأشغال التشطيب',
+    tasksFr:
+      'Diagnostic et traitement de l’humidité\nReconfiguration des pièces et cuisines\nDépose contrôlée des anciens revêtements\nPréparation complète avant finitions',
+    artisanId: '',
     sortOrder: 3,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-skill-welding',
+    id: 'template-skill-welding',
     nameAr: 'اللحام والحدادة الفنية والهياكل المعدنية',
     nameFr: 'Soudure TIG/MIG & ferronnerie d’art',
     category: 'welding',
     level: 'expert',
+    experienceLabel: 'ورشة وميدان',
     summaryAr:
-      'تصنيع وتركيب البوابات الحديدية، الدرابزين العصري، السلالم المعدنية، وهياكل المظلات والحديد المطاوع.',
+      'تصنيع ولحام وتركيب البوابات الحديدية، الدرابزين، السلالم المعدنية، والمظلات والهياكل الحديدية.',
     summaryFr:
-      'Fabrication de portails, garde-corps, escaliers acier et charpentes soudées.',
-    toolsAr: 'آلات لحام MIG/TIG، قاطع بلازما، طلاء إيبوكسي مضاد للصدأ',
+      'Fabrication, soudage et pose de portails, garde-corps, escaliers métalliques et pergolas.',
+    toolsAr: 'ماكينات لحام MIG/TIG وArc، قاطع بلازما، صاروخ جلي، طلاء مضاد للصدأ',
+    toolsFr: 'Postes à souder MIG/TIG/Arc, découpeur plasma, peinture époxy',
+    tasksAr:
+      'تفصيل البوابات والأبواب الحديدية\nصناعة درابزين السلالم والشرفات\nتصميم ولحام السلالم والهياكل الداعمة\nمعالجة الصدأ والطلاء الواقي',
+    tasksFr:
+      'Portails et portes métalliques sur mesure\nGarde-corps d’escaliers et balcons\nEscaliers acier et structures porteuses\nTraitement anti-corrosion et finition',
+    artisanId: '',
     sortOrder: 4,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-skill-electricity',
-    nameAr: 'تأسيس الكهرباء المعمارية واللوحات الذكية',
-    nameFr: 'Électricité architecturale & tableaux',
+    id: 'template-skill-electricity',
+    nameAr: 'التأسيس الكهربائي واللوحات المحمية',
+    nameFr: 'Électricité générale & tableaux',
     category: 'electricity',
     level: 'certified',
+    experienceLabel: 'معايير سلامة',
     summaryAr:
-      'تمديد الشبكات الكهربائية الثلاثية والأحادية، تركيب قواطع الحماية التفاضلية، والإضاءة المخفية.',
+      'تأسيس وتجديد الشبكات الكهربائية السكنية، فصل الدوائر، تجهيز اللوحات التفاضلية، والإضاءة المعمارية.',
     summaryFr:
-      'Câblage normé, tableaux différentiels, profilés LED et domotique résidentielle.',
-    toolsAr: 'جهاز فحص العزل، كاشف الأسلاك، منظم توزيع الأحمال',
+      'Câblage résidentiel normé, séparation des circuits, tableaux différentiels et éclairage LED.',
+    toolsAr: 'جهاز قياس العزل والممانعة، كاشف أسلاك، أدوات كبس وتوزيع',
+    toolsFr: 'Testeur d’isolement, détecteur de câbles, outillage isolé 1000V',
+    tasksAr:
+      'تمديد الكوابل وفصل خطوط القوة والإنارة\nتركيب لوحات القواطع والحماية التفاضلية\nتجهيز الإضاءة المخفية وبروفايلات LED\nتأريض الشبكة وفحص السلامة',
+    tasksFr:
+      'Tirage de circuits prises, force et éclairage\nPose de tableaux différentiels\nÉclairage encastré et rubans LED\nMise à la terre et tests de conformité',
+    artisanId: '',
     sortOrder: 5,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-skill-plumbing',
+    id: 'template-skill-plumbing',
     nameAr: 'السباكة متعددة الطبقات والتدفئة والعزل',
     nameFr: 'Plomberie multicouche, chauffage & étanchéité',
     category: 'plumbing',
     level: 'expert',
+    experienceLabel: 'اختبار ضغط',
     summaryAr:
-      'شبكات المياه الساخنة والباردة بأنابيب Multicouche، تركيب المجمّعات، الغلايات، وعزل الحمامات.',
+      'تمديدات المياه الساخنة والباردة بأنابيب Multicouche، التدفئة المركزية، والعزل المائي للحمامات.',
     summaryFr:
-      'Réseaux PEX/multicouche, collecteurs laiton, chaudières et étanchéité sous carrelage.',
-    toolsAr: 'مكبس هيدروليكي، مضخة اختبار الضغط، أغشية عزل مائي',
+      'Réseaux PEX/multicouche sur collecteurs, chauffage central et étanchéité des pièces humides.',
+    toolsAr: 'مكبس هيدروليكي، مضخة اختبار الضغط، لحام PPR، أغشية عزل مائي',
+    toolsFr: 'Pince à sertir électro-hydraulique, pompe d’épreuve, kit étanchéité',
+    tasksAr:
+      'تركيب مجمّعات التوزيع المستقلة\nتمديد شبكات التدفئة والغلايات\nتجهيز الحمامات والخلاطات الدفينة\nاختبار الضغط ومنع التسربات',
+    tasksFr:
+      'Pose de collecteurs et nourrices\nChauffage central et chaudières\nÉquipement sanitaire et encastrés\nÉpreuve sous pression avant fermeture',
+    artisanId: '',
     sortOrder: 6,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-skill-carpentry',
+    id: 'template-skill-carpentry',
     nameAr: 'النجارة العصرية والألمنيوم والمطابخ',
     nameFr: 'Menuiserie bois, aluminium & cuisines',
     category: 'carpentry',
     level: 'advanced',
+    experienceLabel: 'تفصيل حسب الطلب',
     summaryAr:
-      'تفصيل المطابخ المدمجة، الأبواب الخشبية، نوافذ الألمنيوم العازلة، والخزائن المصممة حسب المقاس.',
+      'تفصيل وتركيب المطابخ المدمجة، الأبواب الداخلية، الخزائن، ونوافذ الألمنيوم العازلة.',
     summaryFr:
-      'Cuisines intégrées, portes intérieures, menuiserie aluminium double vitrage.',
-    toolsAr: 'مناشير دقيقة بالليزر، مفصلات هيدروليكية، ألمنيوم حراري',
+      'Fabrication et pose de cuisines intégrées, portes, dressings et menuiserie aluminium.',
+    toolsAr: 'مناشير توجيه دقيقة، مثقاب تجميع، ألمنيوم حراري ومفصلات هيدروليكية',
+    toolsFr: 'Scie plongeante sur rail, gabarits d’assemblage, quincaillerie soft-close',
+    tasksAr:
+      'تفصيل خزائن المطبخ والواجهات\nتركيب الأبواب الخشبية والأطر\nنوافذ وأبواب الألمنيوم مزدوجة الزجاج\nضبط المفصلات والأدراج الهيدروليكية',
+    tasksFr:
+      'Cuisines intégrées sur mesure\nPortes intérieures et placards\nMenuiserie aluminium double vitrage\nRéglage quincaillerie hydraulique',
+    artisanId: '',
     sortOrder: 7,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-skill-painting',
-    nameAr: 'الدهان الديكوري وأسقف الجبس المعلقة',
-    nameFr: 'Peinture décorative & placoplâtre',
+    id: 'template-skill-painting',
+    nameAr: 'الدهان الديكوري وأسقف الجبس BA13',
+    nameFr: 'Peinture décorative & placoplâtre BA13',
     category: 'painting',
     level: 'advanced',
+    experienceLabel: 'تشطيب نهائي',
     summaryAr:
-      'تهيئة الجدران بالمعجون، تركيب ألواح BA13 المقاومة للرطوبة، والدهانات القابلة للغسل والواجهات.',
+      'تهيئة الجدران بالمعجون، تركيب أسقف وقواطع الجبس المقاومة للرطوبة، والطلاء الداخلي والخارجي.',
     summaryFr:
-      'Enduits lissés, faux plafonds BA13 et peintures architecturales lavables.',
-    toolsAr: 'ماكينة رش Airless، صنفرة مع شفط الغبار، دهانات أكريليك',
+      'Préparation des supports, plafonds et cloisons BA13 hydrofuges, peintures architecturales.',
+    toolsAr: 'ماكينة رش Airless، صنفرة مع شفط الغبار، مساطر جبس وليزر',
+    toolsFr: 'Station de peinture Airless, ponceuse girafe aspirante, laser ligne',
+    tasksAr:
+      'تركيب أسقف BA13 ومسارات الإنارة\nصنفرة ومعالجة الشقوق بالمعجون\nالدهان القابل للغسل والدهانات الديكورية\nطلاء الواجهات المقاوم للعوامل الجوية',
+    tasksFr:
+      'Faux plafonds BA13 et corniches LED\nEnduisage fin et ponçage sans poussière\nPeintures lavables et effets décoratifs\nRevêtement et protection de façades',
+    artisanId: '',
     sortOrder: 8,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
 ];
 
 export const CURATED_SERVICES: TeamServiceGuideRecord[] = [
   {
-    id: 'baseline-service-ceramics',
+    id: 'template-service-ceramics',
     titleAr: 'تركيب السيراميك والبورسلان والرخام',
     titleFr: 'Pose de Céramique, Grès Cérame & Marbre',
     category: 'ceramics',
     natureAr:
-      'أشغال تبليط وتلبيس الأرضيات والجدران الداخلية والخارجية باستخدام البورسلان كبير المقاس، السيراميك، والرخام الطبيعي.',
+      'أشغال تبليط وتلبيس الأرضيات والجدران الداخلية والخارجية بالبورسلان والسيراميك والرخام مع ضبط الاستواء والميول.',
     natureFr:
-      'Revêtement de sols et murs intérieurs/extérieurs en grès cérame grand format, faïence et marbre.',
+      'Revêtement complet de sols et murs intérieurs/extérieurs en grès cérame, faïence et pierre naturelle.',
     deliverablesAr:
-      'تسوية الأرضية (Chape) وضبط الميول\nتركيب البورسلان والسيراميك بغراء C2TE المزدوج\nضبط الفواصل بمشابك التسوية الليزرية 1 ملم\nتقطيع الزوايا بزاوية 45 درجة (Onglet) وملء الفواصل بالإيبوكسي',
+      'تسوية الأرضية (Chape) وضبط الميول\nتركيب البورسلان والسيراميك باللصق المزدوج\nضبط الفواصل بمشابك التسوية الليزرية\nتقطيع الزوايا بزاوية 45 درجة وملء الفواصل',
     deliverablesFr:
-      'Ragréage et mise à niveau laser de la chape\nDouble encollage haute adhérence C2TE\nNivellement par cales et joints réguliers de 1 mm\nCoupes à 45° et jointoiement hydrofuge',
+      'Ragréage et mise à niveau laser de la chape\nDouble encollage haute adhérence\nNivellement par cales et joints réguliers\nCoupes d’onglet à 45° et jointoiement étanche',
     stagesAr:
-      'المعاينة ورفع المقاسات الدقيقة بالمتر الليزري\nتجهيز السطح ومعالجة العزل المائي في الحمامات\nالتخطيط المسبق لاتجاه البلاط وتقليل الفواقد\nالتركيب، التنظيف النهائي، وتسليم الأرضية جاهزة',
+      'المعاينة ورفع المقاسات الدقيقة بالمتر الليزري\nتجهيز السطح ومعالجة العزل المائي في المناطق الرطبة\nتخطيط توزيع البلاط لتقليل الهدر وتوحيد الخطوط\nالتركيب، التنظيف النهائي، والفحص الشامل',
     stagesFr:
-      'Visite technique et relevé laser des surfaces\nPréparation du support et étanchéité des pièces humides\nCalepinage optimal pour minimiser les découpes\nPose, nettoyage fin de chantier et réception',
+      'Visite technique et relevé laser\nPréparation des supports et étanchéité\nCalepinage optimal des dalles\nPose, nettoyage et contrôle de planéité',
+    materialsToolsAr:
+      'غراء مرن عالي الالتصاق C2TE، فواصل تسوية ليزرية، روبة مقاومة للرطوبة والإيبوكسي، قواطع ماسية مبردة بالماء.',
+    materialsToolsFr:
+      'Mortier-colle flexible C2TE, croisillons autonivelants, joints hydrofuges/époxy, disques diamant à eau.',
+    qualityStandardsAr:
+      'فحص الخلو من الفراغات تحت البلاط، مطابقة استواء السطح بميزان الليزر، واختبار تصريف المياه في الحمامات والتراسات.',
+    qualityStandardsFr:
+      'Contrôle de plein bain de colle sans vide, vérification au laser et test d’écoulement des pentes.',
     outcomeAr:
-      'أرضيات وجدران مستوية تماماً دون فراغات تحت البلاط، مقاومة للرطوبة والماء مع تناسق هندسي للخطوط.',
+      'أرضيات وجدران مستوية تماماً ومقاومة للرطوبة والاستخدام اليومي مع تناسق هندسي للخطوط.',
     outcomeFr:
-      'Surfaces parfaitement planes, sans son creux, étanches et durables avec des lignes de joints impeccables.',
-    durationLabel: '5 – 14 يوماً',
+      'Surfaces planes, étanches et durables avec des lignes de joints homogènes.',
+    durationLabel: 'تُحدد بعد المعاينة حسب المساحة',
     sortOrder: 1,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-service-construction',
+    id: 'template-service-construction',
     titleAr: 'البناء الهيكلي والترميم الشامل',
     titleFr: 'Construction & Rénovation Complète',
     category: 'construction_renovation',
     natureAr:
-      'تنفيذ أشغال البناء من الأساسات والجدران إلى إعادة تأهيل وترميم المنازل والشقق القديمة بالكامل.',
+      'تنفيذ أشغال البناء الهيكلي، القواطع، التلبيس، وإعادة تأهيل المنازل والشقق من الحالة الخام حتى التجهيز للتشطيب.',
     natureFr:
-      'Travaux de maçonnerie, gros œuvre, réaménagement intérieur et rénovation lourde de logements.',
+      'Travaux de maçonnerie, gros œuvre, réaménagement intérieur et réhabilitation complète de logements.',
     deliverablesAr:
-      'بناء الجدران والقواطع بالطوب أو البلوك\nأشغال الهدم الآمن وإزالة الأنقاض\nالتلبيس الإسمنتي الموزون للداخل والواجهات\nتكسية الواجهات بالحجر الطبيعي وبلاط التراسات',
+      'بناء الجدران والقواطع بالطوب أو البلوك\nأشغال الهدم الآمن وإخلاء الأنقاض\nالتلبيس الإسمنتي الموزون للداخل والواجهات\nتكسية الواجهات بالحجر الطبيعي وعزل التراسات',
     deliverablesFr:
-      'Maçonnerie, cloisons et reprises structurelles\nDémolition sécurisée et évacuation des gravats\nEnduit dressé intérieur et ravalement de façade\nHabillage pierre naturelle et étanchéité terrasse',
+      'Maçonnerie, cloisons et reprises\nDémolition contrôlée et évacuation\nEnduits dressés intérieurs et extérieurs\nHabillage pierre et étanchéité terrasses',
     stagesAr:
-      'دراسة حالة المبنى والمخطط الهندسي\nتأمين الموقع وتنفيذ أشغال الهدم أو البناء\nالتلبيس، العزل، وتجهيز الممرات للتقنيين\nالمراجعة النهائية وتسليم الموقع نظيفاً',
+      'دراسة حالة المبنى والمخطط الهندسي أو الميداني\nتأمين الموقع وتنفيذ أشغال الهدم أو البناء\nالتلبيس، العزل، وتهيئة المسارات للكهرباء والسباكة\nالمراجعة الهندسية وتسليم الموقع جاهزاً للتشطيب',
     stagesFr:
-      'Diagnostic technique et planification du chantier\nSécurisation, démolition ou élévation des ouvrages\nEnduits, étanchéité et préparation des lots techniques\nContrôle final et livraison propre',
+      'Diagnostic technique et planification\nSécurisation et gros œuvre / démolition\nEnduits, étanchéité et réservations techniques\nContrôle final avant lots de finition',
+    materialsToolsAr:
+      'إسمنت وملاط مطابق للمواصفات، حديد تسليح، شبك تقوية الزوايا، مواد عزل بيتومينية وإيبوكسية، وأدوات قياس ليزرية.',
+    materialsToolsFr:
+      'Ciment et mortiers dosés, armatures, treillis anti-fissures, membranes d’étanchéité et niveaux laser.',
+    qualityStandardsAr:
+      'التحقق من شاقولية الجدران، تقوية مناطق التقاء الطوب بالخرسانة لمنع التشققات، ومعالجة الرطوبة قبل التلبيس.',
+    qualityStandardsFr:
+      'Contrôle d’aplomb des parois, pontage des jonctions béton/brique et traitement préalable de l’humidité.',
     outcomeAr:
-      'هيكل متين وجدران مستقيمة خالية من التشققات والرطوبة، جاهزة لأعمال التشطيب الفاخرة.',
+      'هيكل متين وجدران مستقيمة خالية من التشققات والرطوبة وجاهزة لباقي مراحل التشطيب.',
     outcomeFr:
-      'Structure saine, murs droits et supports protégés contre l’humidité, prêts pour les finitions.',
-    durationLabel: '15 – 45 يوماً',
+      'Structure saine, murs d’aplomb et supports protégés contre l’humidité.',
+    durationLabel: 'تُحدد حسب حجم الورشة والمخطط',
     sortOrder: 2,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-service-welding',
+    id: 'template-service-welding',
     titleAr: 'اللحام والحدادة الفنية والهياكل',
     titleFr: 'Soudure, Ferronnerie & Structures Acier',
     category: 'welding',
     natureAr:
-      'تفصيل، لحام، وتركيب المصنوعات الحديدية المعمارية والهياكل المعدنية الخاصة بالمنازل والفيلات والمحلات.',
+      'تصميم، تفصيل، لحام وتركيب المصنوعات الحديدية المعمارية والهياكل المعدنية للمنازل والفيلات والمحلات.',
     natureFr:
       'Conception, soudage et pose d’ouvrages métalliques sur mesure pour l’habitat et le bâtiment.',
     deliverablesAr:
-      'تصنيع وتركيب البوابات والأبواب الحديدية الآلية\nدرابزين السلالم والشرفات بتصاميم حديثة\nالسلالم المعدنية والهياكل الداعمة والمظلات\nمعالجة الصدأ والطلاء الحراري الواقي',
+      'تصنيع وتركيب البوابات والأبواب الحديدية\nدرابزين السلالم والشرفات بتصاميم عصرية\nالسلالم المعدنية والهياكل الداعمة والمظلات\nمعالجة الصدأ والطلاء الواقي',
     deliverablesFr:
-      'Portails et portes sécurisées sur mesure\nGarde-corps d’escaliers et balcons contemporains\nEscaliers métalliques, pergolas et auvents\nTraitement anti-corrosion et peinture époxy',
+      'Portails et portes métalliques sécurisées\nGarde-corps d’escaliers et balcons\nEscaliers acier, pergolas et auvents\nTraitement antirouille et peinture de finition',
     stagesAr:
-      'أخذ القياسات وتحديد السمك ونوع الحديد\nالتفصيل واللحام داخل الورشة بتقنية نظيفة\nالصنفرة ومعالجة نقاط اللحام والطلاء التأسيسي\nالتركيب والتثبيت الميداني وضبط التوازن',
+      'أخذ القياسات وتحديد سمك ونوع المقاطع الحديدية\nالقص واللحام داخل الورشة بدقة\nالصنفرة وتنظيف نقاط اللحام والطلاء التأسيسي\nالتركيب والتثبيت الميداني وضبط التوازن والغلق',
     stagesFr:
-      'Prise de cotes et choix des profilés acier\nDécoupe et soudage TIG/MIG en atelier\nMeulage, traitement antirouille et finition\nPose sur chantier et réglage final',
+      'Prise de cotes et choix des profilés\nDécoupe et soudage TIG/MIG en atelier\nMeulage, dégraissage et couche antirouille\nPose sur site, scellement et réglages',
+    materialsToolsAr:
+      'مقاطع حديد مجلفن أو أسود بسماكات مدروسة، أسلاك لحام TIG/MIG، دهانات أساس ضد الصدأ، ومثبتات فولاذية ثقيلة.',
+    materialsToolsFr:
+      'Profilés acier dimensionnés, consommables TIG/MIG, primaire anti-corrosion, ancrages mécaniques.',
+    qualityStandardsAr:
+      'لحام مستمر ومتجانس، جلي نظيف للحواف الحادة، حماية ضد الصدأ قبل الطلاء النهائي، واختبار الثبات والحمولة.',
+    qualityStandardsFr:
+      'Soudures continues et meulées, protection anti-corrosion complète et test de rigidité après ancrage.',
     outcomeAr:
-      'تجهيزات حديدية صلبة ومتناسقة مع الطراز المعماري للمنزل مع حماية طويلة الأمد ضد الصدأ.',
+      'تجهيزات حديدية صلبة وآمنة متناسقة مع الطراز المعماري مع حماية طويلة الأمد من الصدأ.',
     outcomeFr:
-      'Ouvrages robustes aux soudures propres, parfaitement ajustés et protégés contre la corrosion.',
-    durationLabel: '4 – 12 يوماً',
+      'Ouvrages métalliques solides, soignés et protégés durablement contre la corrosion.',
+    durationLabel: 'تُحدد حسب التفصيل والمقاسات',
     sortOrder: 3,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-service-electricity',
-    titleAr: 'الكهرباء المعمارية والأنظمة الذكية',
+    id: 'template-service-electricity',
+    titleAr: 'الكهرباء المعمارية والأنظمة المحمية',
     titleFr: 'Électricité Générale & Éclairage',
     category: 'electricity',
     natureAr:
       'تأسيس وتجديد الشبكات الكهربائية السكنية وتصميم أنظمة الإنارة المخفية ولوحات التوزيع المحمية.',
     natureFr:
-      'Installation et mise aux normes des réseaux électriques, tableaux de protection et éclairage LED.',
+      'Installation et mise en sécurité des réseaux électriques, tableaux différentiels et éclairage LED.',
     deliverablesAr:
-      'توزيع الدوائر الكهربائية وفصل دوائر القوة والإنارة\nتجهيز اللوحة الكهربائية بقواطع تفاضلية\nتركيب الإضاءة المخفية وبروفايلات LED\nتأريض الشبكة وحماية الأجهزة من تقلبات التيار',
+      'توزيع الدوائر وفصل خطوط القوة والإنارة والأجهزة الثقيلة\nتجهيز اللوحة الكهربائية بقواطع تفاضلية\nتركيب الإضاءة المخفية وبروفايلات LED\nتأريض الشبكة وحماية الأجهزة',
     deliverablesFr:
-      'Tirage de circuits dédiés prises, force et éclairage\nTableau équipé de disjoncteurs différentiels\nÉclairage architectural et rubans LED encastrés\nMise à la terre et protection parafoudre',
+      'Séparation des circuits prises, éclairage et gros électroménager\nTableau équipé de protections différentielles\nÉclairage architectural et rubans LED\nMise à la terre et protection',
     stagesAr:
-      'رسم مخطط الأحمال ونقاط المآخذ والإنارة\nحفر المسارات وتمديد الأنابيب والكوابل المعزولة\nتركيب العلب وتوصيل اللوحة واختبار المقاومة\nتثبيت المفاتيح والمصابيح وتسليم المخطط',
+      'رسم مخطط الأحمال ونقاط المآخذ والإنارة\nحفر المسارات وتمديد الأنابيب والكوابل المعزولة\nتجميع اللوحة الكهربائية واختبار العزل والأحمال\nتثبيت المفاتيح والمصابيح وتسليم المخطط',
     stagesFr:
-      'Schéma des circuits et implantations\nSaignées, gainage et tirage des câbles normés\nCâblage du tableau et tests d’isolement\nPose de l’appareillage et mise sous tension',
+      'Planification des charges et implantations\nSaignées, gainage et câblage normé\nCâblage du tableau et tests d’isolement\nPose de l’appareillage et mise sous tension',
+    materialsToolsAr:
+      'كوابل نحاسية معزولة بمقاطع مناسبة للأحمال، أنابيب حماية، قواطع تفاضلية معتمدة، وأجهزة قياس العزل.',
+    materialsToolsFr:
+      'Câbles cuivre normés, gaines ICTA, disjoncteurs différentiels et testeur d’isolement.',
+    qualityStandardsAr:
+      'اختبار العزل الكهربائي قبل التغطية، وسم جميع القواطع بوضوح داخل اللوحة، وضمان عمل الحماية التفاضلية والتأريض.',
+    qualityStandardsFr:
+      'Mesure d’isolement avant rebouchage, repérage complet du tableau et test de déclenchement différentiel.',
     outcomeAr:
-      'شبكة كهربائية آمنة ومنظمة تتحمل الأجهزة الثقيلة مع توزيع إنارة مريح وعملي.',
+      'شبكة كهربائية آمنة ومنظمة تتحمل الأجهزة المنزلية مع إنارة عملية ومريحة.',
     outcomeFr:
-      'Installation sécurisée, équilibrée et conforme, avec un éclairage valorisant chaque pièce.',
-    durationLabel: '4 – 10 أيام',
+      'Installation électrique fiable, sécurisée et claire à exploiter au quotidien.',
+    durationLabel: 'تُحدد حسب عدد النقاط والمساحة',
     sortOrder: 4,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
   {
-    id: 'baseline-service-plumbing',
+    id: 'template-service-plumbing',
     titleAr: 'السباكة والتدفئة المركزية والعزل',
     titleFr: 'Plomberie, Chauffage Central & Étanchéité',
     category: 'plumbing',
     natureAr:
-      'تنفيذ كافة التمديدات الصحية، شبكات التدفئة المركزية، وتجهيز الحمامات والمطابخ مع اختبار الضغط.',
+      'تنفيذ التمديدات الصحية، شبكات التدفئة المركزية، وتجهيز الحمامات والمطابخ مع اختبار الضغط الكامل.',
     natureFr:
-      'Réalisation des réseaux d’eau chaude/froide, chauffage central et équipement sanitaire complet.',
+      'Réseaux sanitaires eau chaude/froide, chauffage central et équipement complet avec épreuve pression.',
     deliverablesAr:
-      'تمديد أنابيب Multicouche بمجمّعات توزيع مستقلة\nتركيب الغلايات والمشعات وتدفئة الأرضيات\nتركيب المراحيض المعلقة وخلاطات الدش الدفينة\nاختبار التسرب بالضغط قبل غلق الجدران',
+      'تمديد أنابيب Multicouche بمجمّعات توزيع مستقلة\nتركيب الغلايات والمشعات وتدفئة الأرضيات\nتركيب المراحيض المعلقة وخلاطات الدش الدفينة\nالعزل المائي واختبار الضغط قبل الغلق',
     deliverablesFr:
-      'Distribution multicouche par nourrices indépendantes\nPose de chaudières, radiateurs et planchers chauffants\nBâti-supports suspendus et robinetterie encastrée\nMise en épreuve sous pression avant fermeture',
+      'Distribution multicouche par nourrices indépendantes\nChaudières, radiateurs et planchers chauffants\nBâti-supports suspendus et robinetterie encastrée\nÉtanchéité et mise en épreuve sous pression',
     stagesAr:
-      'تحديد نقاط التغذية والصرف والميول المطلوبة\nتمديد الأنابيب وتثبيت المجمعات الرئيسية\nفحص الضغط لمدة 24 ساعة للتأكد من خلو التسرب\nتركيب التجهيزات الصحية النهائية والاختبار',
+      'تحديد نقاط التغذية والصرف والميول المطلوبة\nتمديد الأنابيب وتثبيت المجمعات الرئيسية\nفحص الضغط للتأكد من خلو التسرب قبل غلق الجدران\nتركيب التجهيزات الصحية النهائية والاختبار التشغيلي',
     stagesFr:
-      'Repérage des alimentations, évacuations et pentes\nPose des canalisations et collecteurs laiton\nTest de pression 24h avant rebouchage\nInstallation des sanitaires et mise en service',
+      'Repérage des arrivées, évacuations et pentes\nPose des réseaux et collecteurs laiton\nÉpreuve pression avant rebouchage\nPose des sanitaires et mise en eau',
+    materialsToolsAr:
+      'أنابيب Multicouche أو PPR معتمدة، مجمّعات نحاسية بصمامات عزل، أغشية عزل مائي، ومكبس ومضخة ضغط.',
+    materialsToolsFr:
+      'Tubes multicouche certifiés, collecteurs laiton, membranes d’étanchéité, pompe d’épreuve.',
+    qualityStandardsAr:
+      'إلزامية اختبار الشبكة تحت الضغط قبل أي تلبيس، التحقق من ميول الصرف الصحي، ومنع تقاطعات التمديدات غير الآمنة.',
+    qualityStandardsFr:
+      'Mise en pression obligatoire avant fermeture des parois et contrôle des pentes d’évacuation.',
     outcomeAr:
       'تدفق مياه متوازن وخالٍ من التسربات مع سهولة الصيانة عبر مجمعات التوزيع المستقلة.',
     outcomeFr:
-      'Réseau fiable sans fuite, pression constante et maintenance facilitée par nourrices.',
-    durationLabel: '4 – 10 أيام',
+      'Réseau fiable, sans fuite, avec coupure et maintenance faciles par circuit.',
+    durationLabel: 'تُحدد حسب حجم التمديدات',
     sortOrder: 5,
-    ownerId: 'curated',
-    isCurated: true,
+    ownerId: 'template',
   },
 ];
 
-export const CURATED_TEAM_MEMBERS: ArtisanRecord[] = [
-  {
-    id: 'baseline-team-nassim',
-    displayName: 'نسيم ع. · ورشة السيراميك والبناء',
-    roleTitle: 'مشرف الفريق ومختص البورسلان والترميم',
-    profession: 'ceramics',
-    experienceYears: 12,
-    wilaya: 'الجزائر العاصمة',
-    commune: 'حيدرة',
-    bio: 'خبرة ميدانية في الإشراف على مشاريع البناء والترميم الشامل وتركيب ألواح البورسلان كبيرة المقاس والرخام بدقة ليزرية.',
-    skillsList: [
-      'بورسلان 120×240',
-      'التسوية بالليزر',
-      'الترميم الشامل',
-      'عزل الحمامات',
-    ],
-    avatarUrl: GENERATED_ASSETS.ceramicArtisan,
-    ownerId: 'curated',
-    isCurated: true,
-  },
-  {
-    id: 'baseline-team-welding',
-    displayName: 'كريم ب. · ورشة اللحام والحدادة',
-    roleTitle: 'حرفي لحام وهياكل معدنية',
-    profession: 'welding',
-    experienceYears: 10,
-    wilaya: 'البليدة',
-    commune: 'بوفاريك',
-    bio: 'متخصص في تصنيع البوابات الحديدية، السلالم المعدنية، الدرابزين المعماري، والهياكل الملحومة بتقنية TIG وMIG.',
-    skillsList: [
-      'لحام TIG/MIG',
-      'بوابات وأسوار',
-      'سلالم معدنية',
-      'طلاء ضد الصدأ',
-    ],
-    avatarUrl: GENERATED_ASSETS.weldingCraft,
-    ownerId: 'curated',
-    isCurated: true,
-  },
-  {
-    id: 'baseline-team-mep',
-    displayName: 'يوسف م. · وحدة الكهرباء والسباكة',
-    roleTitle: 'تقني التأسيس الكهربائي والسباكة',
-    profession: 'electricity',
-    experienceYears: 9,
-    wilaya: 'الجزائر العاصمة',
-    commune: 'دالي إبراهيم',
-    bio: 'إنجاز اللوحات الكهربائية المحمية، الإنارة المخفية LED، وتمديدات السباكة متعددة الطبقات والتدفئة المركزية.',
-    skillsList: [
-      'لوحات كهربائية',
-      'إنارة LED',
-      'سباكة Multicouche',
-      'تدفئة مركزية',
-    ],
-    avatarUrl: GENERATED_ASSETS.electricalMep,
-    ownerId: 'curated',
-    isCurated: true,
-  },
-];
-
-export const CURATED_PROJECTS: ProjectRecord[] = [
-  {
-    id: 'curated-oran-apartment',
-    title: 'نموذج مرجعي: ترميم وتأهيل شقة من الطوب الأحمر إلى التسليم',
-    category: 'construction_renovation',
-    location: 'بئر الجير، وهران',
-    areaSqm: '140 م²',
-    description:
-      'تجديد متكامل لشقة سكنية انطلاقاً من مرحلة الأشغال الكبرى والطوب الأحمر وصولاً إلى التلبيس، التمديدات الصحية والكهربائية، وتركيب البورسلان.',
-    coverImage: GENERATED_ASSETS.afterFinished,
-    beforeImage: GENERATED_ASSETS.beforeConstruction,
-    completedServices: [
-      'بناء وتعديل القواطع',
-      'التلبيس والجبس',
-      'الكهرباء والسباكة',
-      'تبليط البورسلان',
-    ],
-    artisanId: 'baseline-team-nassim',
-    ownerId: 'curated',
-    ownerName: 'فريق اخدم دارك',
-    isCurated: true,
-    extraPhotos: [
-      {
-        imageUrl: GENERATED_ASSETS.beforeConstruction,
-        caption: 'حالة الشقة قبل بدء أشغال الترميم والتبليط',
-      },
-    ],
-  },
-  {
-    id: 'curated-hydra-villa',
-    title: 'نموذج مرجعي: تبليط وتجديد صالون فيلا بالبورسلان الترافرتين',
-    category: 'ceramics',
-    location: 'حيدرة، الجزائر العاصمة',
-    areaSqm: '210 م²',
-    description:
-      'تجديد طابق أرضي بفيلا سكنية مع تركيب ألواح بورسلان مقاس 120×120 سم بتشطيب ترافرتين طبيعي، وإعادة تهيئة الأسقف الجبسية مع الإضاءة المخفية.',
-    coverImage: GENERATED_ASSETS.heroVilla,
-    beforeImage: GENERATED_ASSETS.beforeConstruction,
-    completedServices: [
-      'تسوية الأرضية بالليزر',
-      'تركيب بورسلان 120×120',
-      'أسقف جبسية وإضاءة مخفية',
-    ],
-    artisanId: 'baseline-team-nassim',
-    ownerId: 'curated',
-    ownerName: 'فريق اخدم دارك',
-    isCurated: true,
-    extraPhotos: [
-      {
-        imageUrl: GENERATED_ASSETS.ceramicArtisan,
-        caption: 'تفاصيل التقاء الأرضيات مع الفواصل المعدنية الدقيقة',
-      },
-      {
-        imageUrl: GENERATED_ASSETS.afterFinished,
-        caption: 'إطلالة شاملة على الصالون بعد التسليم النهائي',
-      },
-    ],
-  },
-  {
-    id: 'curated-welding-staircase',
-    title: 'نموذج مرجعي: تفصيل ولحام سلم معدني وبوابة خارجية عصرية',
-    category: 'welding',
-    location: 'بوفاريك، البليدة',
-    areaSqm: '45 م²',
-    description:
-      'تصنيع ولحام هيكل سلم معدني بسمك مقوى مع بوابة حديدية مصممة بالليزر ومعالجة كاملة بمضادات الصدأ والطلاء الأسود غير اللامع.',
-    coverImage: GENERATED_ASSETS.weldingCraft,
-    completedServices: [
-      'تفصيل هيكل سلم فولاذي',
-      'بوابة حديدية آمنة',
-      'معالجة وطلاء إيبوكسي',
-    ],
-    artisanId: 'baseline-team-welding',
-    ownerId: 'curated',
-    ownerName: 'فريق اخدم دارك',
-    isCurated: true,
-  },
-  {
-    id: 'curated-mep-panel',
-    title: 'نموذج مرجعي: تأسيس لوحة كهرباء وتوزيع سباكة Multicouche',
-    category: 'electricity',
-    location: 'دالي إبراهيم، الجزائر العاصمة',
-    areaSqm: '165 م²',
-    description:
-      'تركيب لوحة كهربائية تفاضلية متعددة الدوائر مع إضاءة سقفية غاطسة وتأسيس شبكة توزيع مياه وتدفئة مركزية بمجمّعات نحاسية.',
-    coverImage: GENERATED_ASSETS.electricalMep,
-    beforeImage: GENERATED_ASSETS.beforeConstruction,
-    completedServices: [
-      'لوحة توزيع كهربائية محمية',
-      'تمديد إضاءة LED سقفية',
-      'مجمع سباكة Multicouche',
-    ],
-    artisanId: 'baseline-team-mep',
-    ownerId: 'curated',
-    ownerName: 'فريق اخدم دارك',
-    isCurated: true,
-  },
-  {
-    id: 'curated-kitchen-calacatta',
-    title: 'نموذج مرجعي: تصميم وتبليط مطبخ عصري بألواح الكالاكاتا',
-    category: 'ceramics',
-    location: 'دالي إبراهيم، الجزائر العاصمة',
-    areaSqm: '38 م²',
-    description:
-      'تركيب ألواح سيراميك وبورسلان كالاكاتا الكبيرة للجدران وجزيرة المطبخ الوسطية مع تناسق العروق الرخامية وأرضيات مصقولة.',
-    coverImage: GENERATED_ASSETS.kitchenMarble,
-    beforeImage: GENERATED_ASSETS.beforeConstruction,
-    completedServices: [
-      'ألواح كالاكاتا للجدران',
-      'سباكة المطبخ والعزل',
-      'إضاءة عمل مدمجة',
-    ],
-    artisanId: 'baseline-team-nassim',
-    ownerId: 'curated',
-    ownerName: 'فريق اخدم دارك',
-    isCurated: true,
-  },
-  {
-    id: 'curated-facade-bejaia',
-    title: 'نموذج مرجعي: بناء وتكسية واجهة فيلا ساحلية بالحجر الطبيعي',
-    category: 'construction_renovation',
-    location: 'بجاية',
-    areaSqm: '340 م²',
-    description:
-      'أشغال البناء والتشطيب الخارجي شاملة تكسية الأعمدة بالحجر الطبيعي المقاوم للرطوبة وتبليط التراس ببلاط خارجي مانع للانزلاق.',
-    coverImage: GENERATED_ASSETS.exteriorFacade,
-    completedServices: [
-      'تكسية واجهة بالحجر الطبيعي',
-      'عزل الرطوبة الخارجي',
-      'تبليط التراس الخارجي',
-    ],
-    artisanId: 'baseline-team-nassim',
-    ownerId: 'curated',
-    ownerName: 'فريق اخدم دارك',
-    isCurated: true,
-  },
-];
+export const CURATED_TEAM_MEMBERS: ArtisanRecord[] = [];
+export const CURATED_PROJECTS: ProjectRecord[] = [];
