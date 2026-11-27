@@ -1,0 +1,123 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A public construction, ceramics, or home renovation work showcased on dz darkom pro.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Project title in Arabic or French",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "description": "Work category identifier",
+          "enum": ["ceramics", "construction", "renovation", "kitchen_bath", "facades"]
+        },
+        "location": {
+          "type": "string",
+          "description": "Wilaya or city in Algeria",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "areaSqm": {
+          "type": "string",
+          "description": "Project area or scope metric",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of materials and execution",
+          "minLength": 5,
+          "maxLength": 1500
+        },
+        "coverImage": {
+          "type": "string",
+          "description": "HTTPS URL or compressed data:image URI (max 450KB)",
+          "minLength": 10,
+          "maxLength": 450000
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the creator",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerName": {
+          "type": "string",
+          "description": "Display name of the creator",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "title",
+        "category",
+        "location",
+        "areaSqm",
+        "description",
+        "coverImage",
+        "ownerId",
+        "ownerName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ProjectPhoto": {
+      "title": "ProjectPhoto",
+      "description": "Additional gallery photo attached to a project.",
+      "type": "object",
+      "properties": {
+        "imageUrl": {
+          "type": "string",
+          "description": "HTTPS URL or compressed data:image URI (max 450KB)",
+          "minLength": 10,
+          "maxLength": 450000
+        },
+        "caption": {
+          "type": "string",
+          "description": "Short caption for the photo",
+          "minLength": 0,
+          "maxLength": 200
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the creator",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        }
+      },
+      "required": ["imageUrl", "caption", "ownerId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Publicly readable showcase of construction, ceramics, and renovation projects; writable by verified authenticated owners and admins."
+    },
+    "/projects/{projectId}/photos/{photoId}": {
+      "schema": { "$ref": "#/entities/ProjectPhoto" },
+      "description": "Additional high-resolution photos belonging to a project."
+    }
+  }
+}

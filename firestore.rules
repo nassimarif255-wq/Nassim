@@ -1,0 +1,151 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'nassimarif255@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidCategory(cat) {
+      return cat in ['ceramics', 'construction', 'renovation', 'kitchen_bath', 'facades'];
+    }
+
+    function isValidImageUri(uri) {
+      return uri is string &&
+        uri.size() >= 10 &&
+        uri.size() <= 450000 &&
+        (uri.matches('^https://.*') || uri.matches('^data:image/(jpeg|jpg|png|webp);base64,.*'));
+    }
+
+    // Validation Blueprint: Project
+    function isValidProject(data) {
+      return data.keys().hasAll([
+          'title', 'category', 'location', 'areaSqm',
+          'description', 'coverImage', 'ownerId', 'ownerName',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'category', 'location', 'areaSqm',
+          'description', 'coverImage', 'ownerId', 'ownerName',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 3 && data.title.size() <= 120 &&
+        isValidCategory(data.category) &&
+        data.location is string && data.location.size() >= 2 && data.location.size() <= 80 &&
+        data.areaSqm is string && data.areaSqm.size() >= 1 && data.areaSqm.size() <= 30 &&
+        data.description is string && data.description.size() >= 5 && data.description.size() <= 1500 &&
+        isValidImageUri(data.coverImage) &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: ProjectPhoto
+    function isValidProjectPhoto(data) {
+      return data.keys().hasAll(['imageUrl', 'caption', 'ownerId', 'createdAt']) &&
+        data.keys().hasOnly(['imageUrl', 'caption', 'ownerId', 'createdAt']) &&
+        isValidImageUri(data.imageUrl) &&
+        data.caption is string && data.caption.size() <= 200 &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        data.createdAt is timestamp;
+    }
+
+    // Startup connection check document
+    match /test/connection {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // Admin registry (read-only for admins; managed out-of-band)
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isVerifiedUser() && request.auth.uid == adminId;
+      allow list, write: if false;
+    }
+
+    // Public Projects Showcase
+    match /projects/{projectId} {
+      allow get: if isValidId(projectId);
+      allow list: if resource.data.title is string;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(projectId) &&
+        isValidProject(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(projectId) &&
+        isValidProject(incoming()) &&
+        (existing().ownerId == request.auth.uid || isAdmin()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'category', 'location', 'areaSqm',
+          'description', 'coverImage', 'updatedAt'
+        ]);
+
+      allow delete: if isVerifiedUser() &&
+        isValidId(projectId) &&
+        (existing().ownerId == request.auth.uid || isAdmin());
+
+      // Subcollection: Additional Photos for a Project (Master Gate)
+      match /photos/{photoId} {
+        allow get: if isValidId(projectId) && isValidId(photoId);
+        allow list: if resource.data.imageUrl is string;
+
+        allow create: if isVerifiedUser() &&
+          isValidId(projectId) &&
+          isValidId(photoId) &&
+          isValidProjectPhoto(incoming()) &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/projects/$(projectId)) &&
+          (
+            get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid ||
+            isAdmin()
+          );
+
+        allow delete: if isVerifiedUser() &&
+          isValidId(projectId) &&
+          isValidId(photoId) &&
+          exists(/databases/$(database)/documents/projects/$(projectId)) &&
+          (
+            existing().ownerId == request.auth.uid ||
+            get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid ||
+            isAdmin()
+          );
+      }
+    }
+  }
+}
